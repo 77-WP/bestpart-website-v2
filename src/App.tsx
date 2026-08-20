@@ -1,9 +1,19 @@
-function App() {
-  return (
-    <div className="min-h-screen bg-background flex items-center justify-center">
-      <h1 className="text-4xl font-bold">BestPart Website v2</h1>
-    </div>
-  )
-}
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import Landing from './pages/Landing';
+import Order from './pages/Order';
+import Track from './pages/Track';
+import Me from './pages/Me';
 
-export default App
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Landing />} />
+        <Route path="/order" element={<Order />} />
+        <Route path="/track" element={<Track />} />
+        <Route path="/track/:orderId" element={<Track />} />
+        <Route path="/me" element={<Me />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}

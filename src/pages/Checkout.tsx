@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useCart, cartTotal } from '../store/cart';
+import { useCart, cartTotal, itemTotal } from '../store/cart';
+import { supabase } from '../lib/supabase';
 import { I } from '../components/icons';
 
 const METHODS = [
@@ -21,6 +22,12 @@ const PAYMENT_OPTS = [
   { id: 'cash',      label: 'เงินสดที่ร้าน', sub: 'Pay at counter',             icon: I.cash(16) },
 ];
 
+const FULFILLMENT_MAP: Record<string, string> = {
+  dine:     'dine-in',
+  takeaway: 'takeaway',
+  curbside: 'curbside',
+};
+
 export default function Checkout() {
   const navigate = useNavigate();
   const { items, clear } = useCart();
@@ -28,15 +35,56 @@ export default function Checkout() {
   const [method,    setMethod]  = useState('takeaway');
   const [timeSlot,  setTime]    = useState(0);
   const [payment,   setPayment] = useState('promptpay');
+  const [loading,   setLoading] = useState(false);
+  const [error,     setError]   = useState<string | null>(null);
 
   const subtotal  = cartTotal(items);
   const discount  = subtotal >= 200 ? 20 : 0;
   const packaging = 5;
   const total     = subtotal - discount + packaging;
 
-  function handleConfirm() {
+  async function handleConfirm() {
+    setLoading(true);
+    setError(null);
+
+    const orderItems = items.map(it => ({
+      name:       it.name,
+      name_en:    it.nameEn,
+      item_id:    it.itemId,
+      qty:        it.qty,
+      unit_price: itemTotal(it) / it.qty,
+      total:      itemTotal(it),
+      size:       it.sizeLabel,
+      spice:      it.spice,
+      addons:     it.addons,
+    }));
+
+    const { data, error: dbError } = await supabase
+      .from('orders')
+      .insert({
+        items:                   orderItems,
+        subtotal:                subtotal,
+        discount_amount:         discount,
+        delivery_fee:            packaging,
+        grand_total:             total,
+        status:                  'pending',
+        payment_status:          'pending',
+        fulfillment_type:        FULFILLMENT_MAP[method] ?? 'takeaway',
+        checkout_payment_method: payment,
+        source:                  'web',
+      })
+      .select('id')
+      .single();
+
+    setLoading(false);
+
+    if (dbError || !data) {
+      setError('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
+      return;
+    }
+
     clear();
-    navigate('/track/8204');
+    navigate(`/track/${data.id}`);
   }
 
   return (
@@ -212,16 +260,26 @@ export default function Checkout() {
         bottom: 0, width: '100%', maxWidth: 480,
         padding: '14px 18px 26px', background: 'var(--bg)', borderTop: '1px solid var(--line)', zIndex: 30,
       }}>
+        {error && (
+          <div style={{
+            marginBottom: 10, padding: '10px 14px', borderRadius: 'var(--r-md)',
+            background: 'rgba(178,58,31,0.10)', color: 'var(--danger)',
+            fontSize: 12, textAlign: 'center',
+          }}>{error}</div>
+        )}
         <button
           onClick={handleConfirm}
+          disabled={loading}
           style={{
-            width: '100%', background: 'var(--accent)', color: 'var(--on-accent)',
+            width: '100%', background: loading ? 'var(--ink-3)' : 'var(--accent)',
+            color: 'var(--on-accent)',
             border: 0, padding: '16px 18px', borderRadius: 'var(--r-pill)',
             fontWeight: 600, fontSize: 13, letterSpacing: '.04em',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            cursor: loading ? 'not-allowed' : 'pointer',
           }}
         >
-          <span>ไปหน้าชำระเงิน</span>
+          <span>{loading ? 'กำลังสร้างออเดอร์…' : 'ยืนยันและชำระเงิน'}</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span className="thb" style={{ fontFamily: 'var(--mono)', fontSize: 16 }}>{total}</span>
             {I.arrow(14)}

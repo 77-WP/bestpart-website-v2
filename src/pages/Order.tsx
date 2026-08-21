@@ -1,17 +1,53 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CATS, MENU_ITEMS } from '../data/menu';
+import { supabase } from '../lib/supabase';
 import { Bowl } from '../components/Bowl';
 import { TabBar } from '../components/TabBar';
 import { CartBar } from '../components/CartBar';
 import { I } from '../components/icons';
 
-export default function Order() {
-  const [activeCat, setActiveCat] = useState('best');
-  const navigate = useNavigate();
+type Category = { id: string; name_th: string; name_en: string; display_order: number };
+type MenuItem  = { id: string; name_th: string; name_en: string; base_price: number; image_url: string | null; is_best_seller: boolean };
 
-  const filtered = MENU_ITEMS.filter(it => it.cat === activeCat);
-  const activeCatData = CATS.find(c => c.id === activeCat)!;
+export default function Order() {
+  const navigate = useNavigate();
+  const [cats, setCats]           = useState<Category[]>([]);
+  const [activeCat, setActiveCat] = useState<string>('');
+  const [items, setItems]         = useState<MenuItem[]>([]);
+  const [loadingItems, setLoadingItems] = useState(false);
+
+  // Fetch categories once
+  useEffect(() => {
+    supabase
+      .from('categories')
+      .select('id, name_th, name_en, display_order')
+      .order('display_order', { ascending: true })
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          setCats(data as Category[]);
+          setActiveCat(data[0].id);
+        }
+      });
+  }, []);
+
+  // Fetch items when active category changes
+  useEffect(() => {
+    if (!activeCat) return;
+    setLoadingItems(true);
+    setItems([]);
+    supabase
+      .from('menu_items')
+      .select('id, name_th, name_en, base_price, image_url, is_best_seller')
+      .eq('is_active', true)
+      .eq('category_id', activeCat)
+      .order('display_order', { ascending: true })
+      .then(({ data }) => {
+        setItems((data ?? []) as MenuItem[]);
+        setLoadingItems(false);
+      });
+  }, [activeCat]);
+
+  const activeCatData = cats.find(c => c.id === activeCat);
 
   return (
     <div className="page" style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
@@ -46,17 +82,14 @@ export default function Order() {
 
         {/* Category rail */}
         <div style={{ width: 92, flexShrink: 0, background: 'var(--bg-3)', paddingTop: 16 }}>
-          {CATS.map(c => (
+          {cats.map(c => (
             <button
               key={c.id}
               onClick={() => setActiveCat(c.id)}
               style={{
-                width: '100%',
-                padding: '14px 8px 14px 14px',
-                position: 'relative',
+                width: '100%', padding: '14px 8px 14px 14px', position: 'relative',
                 background: c.id === activeCat ? 'var(--bg)' : 'transparent',
-                border: 0,
-                textAlign: 'left',
+                border: 0, textAlign: 'left',
               }}
             >
               {c.id === activeCat && (
@@ -71,14 +104,15 @@ export default function Order() {
                 fontSize: c.id === activeCat ? 14 : 12,
                 color: c.id === activeCat ? 'var(--ink)' : 'var(--ink-2)',
                 lineHeight: 1.2,
-              }}>{c.th}</div>
-              <div style={{ fontSize: 9, color: 'var(--ink-3)', marginTop: 2, letterSpacing: '.04em' }}>{c.en}</div>
+              }}>{c.name_th}</div>
+              <div style={{ fontSize: 9, color: 'var(--ink-3)', marginTop: 2, letterSpacing: '.04em' }}>{c.name_en}</div>
             </button>
           ))}
         </div>
 
         {/* Item list */}
         <div style={{ flex: 1, padding: '16px 16px 0' }}>
+
           {/* Promo glass card */}
           <div className="glass" style={{
             marginBottom: 14, padding: '12px 14px', borderRadius: 'var(--r-md)',
@@ -93,82 +127,92 @@ export default function Order() {
           </div>
 
           {/* Section header */}
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
-            <div className="h-display-th" style={{ fontSize: 22 }}>{activeCatData.th}</div>
-            <span style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '.06em' }}>
-              {activeCatData.en.toUpperCase()} · {filtered.length} รายการ
-            </span>
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--ink-2)', marginBottom: 6 }}>
-            เสิร์ฟภายใน 8 นาที
-          </div>
+          {activeCatData && (
+            <>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+                <div className="h-display-th" style={{ fontSize: 22 }}>{activeCatData.name_th}</div>
+                <span style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '.06em' }}>
+                  {activeCatData.name_en.toUpperCase()} · {items.length} รายการ
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--ink-2)', marginBottom: 6 }}>เสิร์ฟภายใน 8 นาที</div>
+            </>
+          )}
 
-          {/* Menu rows */}
-          {filtered.length === 0 ? (
+          {/* Loading skeleton */}
+          {loadingItems && Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} style={{ display: 'flex', gap: 12, padding: '14px 0', borderBottom: '1px solid var(--line)' }}>
+              <div style={{ width: 68, height: 68, borderRadius: 'var(--r-sm)', background: 'var(--bg-3)', flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ height: 12, background: 'var(--bg-3)', borderRadius: 4, marginBottom: 8, width: '70%' }} />
+                <div style={{ height: 10, background: 'var(--bg-3)', borderRadius: 4, width: '40%' }} />
+              </div>
+            </div>
+          ))}
+
+          {/* Empty state */}
+          {!loadingItems && items.length === 0 && activeCat && (
             <div style={{ padding: '32px 0', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>
               ยังไม่มีเมนูในหมวดนี้
             </div>
-          ) : (
-            filtered.map(it => (
-              <div
-                key={it.id}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '14px 0', borderBottom: '1px solid var(--line)',
-                  opacity: it.soldOut ? 0.55 : 1,
-                  position: 'relative',
-                }}
-                onClick={() => !it.soldOut && navigate(`/order/${it.id}`)}
-              >
-                {it.soldOut && (
-                  <span style={{
-                    position: 'absolute', top: 18, left: 2,
-                    background: 'var(--ink)', color: 'var(--bg)',
-                    fontSize: 8.5, fontWeight: 700, letterSpacing: '.05em',
-                    padding: '3px 6px', borderRadius: 4, zIndex: 2,
-                  }}>หมดชั่วคราว</span>
+          )}
+
+          {/* Menu rows */}
+          {!loadingItems && items.map(it => (
+            <div
+              key={it.id}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '14px 0', borderBottom: '1px solid var(--line)',
+                position: 'relative', cursor: 'pointer',
+              }}
+              onClick={() => navigate(`/order/${it.id}`)}
+            >
+              {/* Thumbnail */}
+              <div style={{
+                width: 68, height: 68, borderRadius: 'var(--r-sm)',
+                background: 'var(--bg-3)', flexShrink: 0, overflow: 'hidden',
+                display: 'grid', placeItems: 'center',
+              }}>
+                {it.image_url ? (
+                  <img
+                    src={it.image_url}
+                    alt={it.name_th}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  <Bowl tone="clay" topping="egg" size={62} />
                 )}
-                <div style={{
-                  width: 68, height: 68, borderRadius: 'var(--r-sm)',
-                  background: 'var(--bg-3)', display: 'grid', placeItems: 'center', flexShrink: 0,
-                }}>
-                  <Bowl tone={it.tone} topping={it.topping} size={62} />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  {it.tag && !it.soldOut && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
-                      <span style={{
-                        fontSize: 9, fontWeight: 700, letterSpacing: '.08em',
-                        padding: '2px 6px', borderRadius: 3,
-                        background: it.tag === 'HOT' ? 'var(--accent)' : it.tag === 'NEW' ? 'var(--accent-2)' : 'var(--ink)',
-                        color: '#fff',
-                      }}>{it.tag}</span>
-                      {it.tag === 'HOT' && <span style={{ color: 'var(--accent)' }}>{I.flame(11)}</span>}
-                    </div>
-                  )}
-                  <div style={{ fontFamily: 'var(--serif)', fontSize: 15, lineHeight: 1.2 }}>{it.name}</div>
-                  <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 1 }}>{it.nameEn}</div>
-                  <div style={{
-                    fontSize: 11, color: 'var(--ink-2)', marginTop: 4, lineHeight: 1.4,
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }}>{it.desc}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
-                    <span className="price thb" style={{ fontSize: 16, fontFamily: 'var(--mono)' }}>{it.price}</span>
-                    <button
-                      disabled={it.soldOut}
-                      onClick={e => { e.stopPropagation(); if (!it.soldOut) navigate(`/order/${it.id}`); }}
-                      style={{
-                        width: 32, height: 32, borderRadius: '50%',
-                        background: it.soldOut ? 'var(--bg-3)' : 'var(--ink)',
-                        color: it.soldOut ? 'var(--ink-3)' : 'var(--on-accent)',
-                        border: 0, display: 'grid', placeItems: 'center',
-                      }}
-                    >{it.soldOut ? I.close(14) : I.plus(16)}</button>
+              </div>
+
+              {/* Details */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {it.is_best_seller && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+                    <span style={{
+                      fontSize: 9, fontWeight: 700, letterSpacing: '.08em',
+                      padding: '2px 6px', borderRadius: 3,
+                      background: 'var(--accent)', color: '#fff',
+                    }}>BEST</span>
+                    <span style={{ color: 'var(--accent)' }}>{I.flame(11)}</span>
                   </div>
+                )}
+                <div style={{ fontFamily: 'var(--serif)', fontSize: 15, lineHeight: 1.2 }}>{it.name_th}</div>
+                <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 1 }}>{it.name_en}</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
+                  <span className="price thb" style={{ fontSize: 16, fontFamily: 'var(--mono)' }}>{it.base_price}</span>
+                  <button
+                    onClick={e => { e.stopPropagation(); navigate(`/order/${it.id}`); }}
+                    style={{
+                      width: 32, height: 32, borderRadius: '50%',
+                      background: 'var(--ink)', color: 'var(--on-accent)',
+                      border: 0, display: 'grid', placeItems: 'center',
+                    }}
+                  >{I.plus(16)}</button>
                 </div>
               </div>
-            ))
-          )}
+            </div>
+          ))}
 
           <div style={{ height: 40 }} />
         </div>

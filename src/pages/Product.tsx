@@ -1,37 +1,93 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { MENU_ITEMS, SIZES, SPICE_LEVELS, ADDONS } from '../data/menu';
+import { supabase } from '../lib/supabase';
 import { Bowl } from '../components/Bowl';
 import { useCart, type CartItem } from '../store/cart';
 import { I } from '../components/icons';
+
+type MenuItemRow = {
+  id: string;
+  name_th: string;
+  name_en: string;
+  base_price: number;
+  image_url: string | null;
+  is_best_seller: boolean;
+};
+
+const SIZES = [
+  { label: 'ปกติ',   labelEn: 'Regular', price: 0 },
+  { label: 'พิเศษ',  labelEn: 'Large',   price: 20 },
+  { label: 'จัมโบ้', labelEn: 'Jumbo',   price: 50 },
+];
+
+const SPICE_LEVELS = [
+  { label: 'ไม่เผ็ด',  flames: 0 },
+  { label: 'เผ็ดน้อย', flames: 1 },
+  { label: 'เผ็ดกลาง', flames: 2 },
+  { label: 'เผ็ดมาก',  flames: 3 },
+  { label: 'เผ็ดสุด',  flames: 4 },
+];
+
+const ADDONS = [
+  { id: 'egg',   label: 'ไข่ดาวเพิ่ม',  labelEn: 'Extra fried egg',   price: 15 },
+  { id: 'pork',  label: 'หมูกรอบเพิ่ม', labelEn: 'Extra crispy pork', price: 30 },
+  { id: 'sauce', label: 'พริกน้ำปลา',    labelEn: 'Chili fish sauce',  price: 0 },
+];
 
 export default function Product() {
   const { itemId } = useParams();
   const navigate = useNavigate();
   const { add } = useCart();
 
-  const item = MENU_ITEMS.find(i => i.id === itemId);
-  const [sizeIdx, setSizeIdx]   = useState(1);       // default Large
-  const [spiceIdx, setSpiceIdx] = useState(2);       // default เผ็ดกลาง
+  const [item, setItem]         = useState<MenuItemRow | null>(null);
+  const [loading, setLoading]   = useState(true);
+  const [sizeIdx, setSizeIdx]   = useState(1);
+  const [spiceIdx, setSpiceIdx] = useState(2);
   const [addons, setAddons]     = useState<Set<string>>(new Set(['sauce']));
   const [qty, setQty]           = useState(1);
+
+  useEffect(() => {
+    if (!itemId) return;
+    setLoading(true);
+    supabase
+      .from('menu_items')
+      .select('id, name_th, name_en, base_price, image_url, is_best_seller')
+      .eq('id', itemId)
+      .single()
+      .then(({ data }) => {
+        setItem(data as MenuItemRow | null);
+        setLoading(false);
+      });
+  }, [itemId]);
+
+  if (loading) {
+    return (
+      <div className="page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100dvh' }}>
+        <div style={{
+          width: 36, height: 36, borderRadius: '50%',
+          border: '3px solid var(--bg-3)', borderTopColor: 'var(--accent)',
+          animation: 'spin 0.8s linear infinite',
+        }} />
+      </div>
+    );
+  }
 
   if (!item) {
     return (
       <div className="page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100dvh' }}>
         <div style={{ textAlign: 'center', color: 'var(--ink-3)' }}>
-          <div style={{ fontSize: 40, opacity: 0.3 }}>{I.close(40)}</div>
+          <div style={{ opacity: 0.3 }}>{I.close(40)}</div>
           <div style={{ marginTop: 12 }}>ไม่พบเมนูนี้</div>
         </div>
       </div>
     );
   }
 
-  const size       = SIZES[sizeIdx];
-  const spice      = SPICE_LEVELS[spiceIdx];
+  const size         = SIZES[sizeIdx];
+  const spice        = SPICE_LEVELS[spiceIdx];
   const activeAddons = ADDONS.filter(a => addons.has(a.id));
   const addonsPrice  = activeAddons.reduce((s, a) => s + a.price, 0);
-  const unitPrice    = (item?.price ?? 0) + size.price + addonsPrice;
+  const unitPrice    = item.base_price + size.price + addonsPrice;
   const total        = unitPrice * qty;
 
   function toggleAddon(id: string) {
@@ -44,17 +100,17 @@ export default function Product() {
 
   function handleAdd() {
     const cartItem: CartItem = {
-      cartId:     `${item!.id}-${Date.now()}`,
-      itemId:     item!.id,
-      name:       item!.name,
-      nameEn:     item!.nameEn,
-      tone:       item!.tone,
-      topping:    item!.topping,
-      basePrice:  item!.price,
-      sizeLabel:  size.label,
-      sizePrice:  size.price,
-      spice:      spice.label,
-      addons:     activeAddons.map(a => ({ label: a.label, price: a.price })),
+      cartId:    `${item!.id}-${Date.now()}`,
+      itemId:    item!.id,
+      name:      item!.name_th,
+      nameEn:    item!.name_en,
+      tone:      'clay',
+      topping:   'egg',
+      basePrice: item!.base_price,
+      sizeLabel: size.label,
+      sizePrice: size.price,
+      spice:     spice.label,
+      addons:    activeAddons.map(a => ({ label: a.label, price: a.price })),
       qty,
     };
     add(cartItem);
@@ -63,53 +119,67 @@ export default function Product() {
 
   return (
     <div className="page" style={{ paddingBottom: 100 }}>
+
       {/* Hero */}
       <div style={{
-        position: 'relative', height: 300, background: 'var(--bg-3)',
-        display: 'grid', placeItems: 'center', overflow: 'hidden',
+        position: 'relative', height: 300,
+        background: 'var(--bg-3)', overflow: 'hidden',
+        display: 'grid', placeItems: 'center',
       }}>
-        <div style={{
-          position: 'absolute', inset: 0,
-          background: 'radial-gradient(circle at center, var(--bg-3) 0%, var(--bg) 100%)',
-        }} />
-        <Bowl tone={item.tone} topping={item.topping} size={240} />
+        {item.image_url ? (
+          <img
+            src={item.image_url}
+            alt={item.name_th}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        ) : (
+          <>
+            <div style={{
+              position: 'absolute', inset: 0,
+              background: 'radial-gradient(circle at center, var(--bg-3) 0%, var(--bg) 100%)',
+            }} />
+            <Bowl tone="clay" topping="egg" size={240} />
+          </>
+        )}
+
         <button
           onClick={() => navigate(-1)}
           style={{
             position: 'absolute', left: 14, top: 14,
-            width: 36, height: 36, borderRadius: '50%', background: 'var(--bg-2)',
-            border: '1px solid var(--line)', display: 'grid', placeItems: 'center',
+            width: 36, height: 36, borderRadius: '50%',
+            background: 'var(--bg-2)', border: '1px solid var(--line)',
+            display: 'grid', placeItems: 'center',
           }}
         >{I.close(18)}</button>
         <button style={{
           position: 'absolute', right: 14, top: 14,
-          width: 36, height: 36, borderRadius: '50%', background: 'var(--bg-2)',
-          border: '1px solid var(--line)', display: 'grid', placeItems: 'center', color: 'var(--ink-2)',
+          width: 36, height: 36, borderRadius: '50%',
+          background: 'var(--bg-2)', border: '1px solid var(--line)',
+          display: 'grid', placeItems: 'center', color: 'var(--ink-2)',
         }}>{I.heart(16)}</button>
       </div>
 
       {/* Content */}
       <div style={{ padding: '22px 20px 0' }}>
+
         {/* Badges */}
         <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-          {item.tag && (
+          {item.is_best_seller && (
             <span style={{
               fontSize: 9, fontWeight: 700, letterSpacing: '.08em',
               padding: '3px 7px', borderRadius: 3,
-              background: item.tag === 'HOT' ? 'var(--accent)' : item.tag === 'NEW' ? 'var(--accent-2)' : 'var(--ink)',
-              color: '#fff',
-            }}>{item.tag === 'BEST' ? 'BEST SELLER' : item.tag}</span>
+              background: 'var(--accent)', color: '#fff',
+            }}>BEST SELLER</span>
           )}
           <span style={{ fontSize: 10, color: 'var(--ink-3)', display: 'flex', alignItems: 'center', gap: 3 }}>
             <span style={{ color: 'var(--gold)' }}>{I.star(11)}</span> 4.9 (1,284)
           </span>
         </div>
 
-        <div className="h-display-th" style={{ fontSize: 26, lineHeight: 1.15 }}>{item.name}</div>
+        <div className="h-display-th" style={{ fontSize: 26, lineHeight: 1.15 }}>{item.name_th}</div>
         <div style={{ fontFamily: 'var(--serif)', fontStyle: 'italic', color: 'var(--ink-3)', fontSize: 14, marginTop: 4 }}>
-          {item.nameEn}
+          {item.name_en}
         </div>
-        <div style={{ fontSize: 12, color: 'var(--ink-2)', marginTop: 10, lineHeight: 1.6 }}>{item.desc}</div>
 
         {/* Size */}
         <div style={{ marginTop: 22 }}>
@@ -132,7 +202,7 @@ export default function Product() {
                 <div style={{ fontFamily: 'var(--serif)', fontSize: 13 }}>{s.label}</div>
                 <div style={{ fontSize: 9, color: 'var(--ink-3)', marginTop: 1 }}>{s.labelEn}</div>
                 <div className="thb" style={{ fontSize: 13, marginTop: 6, fontWeight: 600 }}>
-                  {s.price === 0 ? item.price : item.price + s.price}
+                  {s.price === 0 ? item.base_price : item.base_price + s.price}
                 </div>
                 {i === sizeIdx && (
                   <span style={{
@@ -188,10 +258,10 @@ export default function Product() {
               }}
             >
               <span style={{
-                width: 20, height: 20, borderRadius: 6,
+                width: 20, height: 20, borderRadius: 6, flexShrink: 0,
                 border: addons.has(a.id) ? '0' : '1.5px solid var(--line-2)',
                 background: addons.has(a.id) ? 'var(--ink)' : 'transparent',
-                color: 'var(--bg)', display: 'grid', placeItems: 'center', flexShrink: 0,
+                color: 'var(--bg)', display: 'grid', placeItems: 'center',
               }}>
                 {addons.has(a.id) && I.check(12)}
               </span>

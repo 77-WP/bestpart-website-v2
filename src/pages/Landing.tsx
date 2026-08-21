@@ -1,9 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Brand } from '../components/Brand';
 import { Bowl } from '../components/Bowl';
 import { TabBar } from '../components/TabBar';
 import { I } from '../components/icons';
+import { supabase } from '../lib/supabase';
+
+type MenuItem = {
+  id: string;
+  name_th: string;
+  name_en: string;
+  base_price: number;
+  image_url: string | null;
+  is_best_seller: boolean;
+};
 
 /* ── Language toggle ────────────────────────────────────── */
 function LangToggle({ lang = 'TH' }: { lang?: 'TH' | 'EN' }) {
@@ -147,14 +157,22 @@ function OrderMethodRow({ onSelect }: { onSelect: () => void }) {
 }
 
 /* ── Best sellers strip ─────────────────────────────────── */
-const BESTSELLERS = [
-  { n: 'กระเพราหมูสับ', en: 'Pad Krapow',       p: 99,  tone: 'clay', topping: 'egg',     flame: true },
-  { n: 'ข้าวไก่กรอบ',   en: 'Crispy Chicken',   p: 115, tone: 'sage', topping: 'chicken'            },
-  { n: 'คั่วพริกเกลือ', en: 'Salt-Pepper Pork', p: 129, tone: 'wood', topping: 'chili',   flame: true },
-  { n: 'ข้าวคลุกกะปิ',  en: 'Shrimp Paste Rice',p: 99,  tone: 'gold', topping: 'rice'               },
-];
-
 function BestSellersStrip({ onAdd }: { onAdd: () => void }) {
+  const [items, setItems] = useState<MenuItem[]>([]);
+
+  useEffect(() => {
+    supabase
+      .from('menu_items')
+      .select('id, name_th, name_en, base_price, image_url, is_best_seller')
+      .eq('is_active', true)
+      .eq('is_best_seller', true)
+      .order('display_order', { ascending: true })
+      .limit(4)
+      .then(({ data }) => { if (data) setItems(data as MenuItem[]); });
+  }, []);
+
+  const isHot = (i: number) => i === 0 || i === 2;
+
   return (
     <div style={{ padding: '24px 0 0' }}>
       <div style={{
@@ -174,24 +192,45 @@ function BestSellersStrip({ onAdd }: { onAdd: () => void }) {
         >ดูทั้งหมด →</button>
       </div>
       <div style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '4px 18px 6px' }}>
-        {BESTSELLERS.map((it, i) => (
+        {/* Skeleton while loading */}
+        {items.length === 0 && Array.from({ length: 4 }).map((_, i) => (
           <div key={i} style={{
             minWidth: 142, padding: 12, borderRadius: 'var(--r-md)',
             background: 'var(--bg-2)', border: '1px solid var(--line)', flexShrink: 0,
           }}>
+            <div style={{ width: 86, height: 86, borderRadius: 'var(--r-md)', background: 'var(--bg-3)', margin: '6px auto 8px' }} />
+            <div style={{ height: 10, borderRadius: 4, background: 'var(--bg-3)', marginBottom: 6 }} />
+            <div style={{ height: 14, borderRadius: 4, background: 'var(--bg-3)', marginBottom: 4 }} />
+            <div style={{ height: 10, width: '60%', borderRadius: 4, background: 'var(--bg-3)' }} />
+          </div>
+        ))}
+        {items.map((it, i) => (
+          <div key={it.id} style={{
+            minWidth: 142, padding: 12, borderRadius: 'var(--r-md)',
+            background: 'var(--bg-2)', border: '1px solid var(--line)', flexShrink: 0,
+          }}>
+            {/* Food photo or Bowl fallback */}
             <div style={{ display: 'flex', justifyContent: 'center', padding: '6px 0 8px' }}>
-              <Bowl tone={it.tone} topping={it.topping} size={86} />
+              {it.image_url ? (
+                <img
+                  src={it.image_url}
+                  alt={it.name_th}
+                  style={{ width: 86, height: 86, objectFit: 'cover', borderRadius: 'var(--r-md)' }}
+                />
+              ) : (
+                <Bowl tone="clay" topping="egg" size={86} />
+              )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: 'var(--accent)' }}>
-              {it.flame && I.flame(11)}
+              {isHot(i) && I.flame(11)}
               <span style={{ fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase' }}>
-                #{i + 1} · {it.flame ? 'hot' : 'top'}
+                #{i + 1} · {isHot(i) ? 'hot' : 'top'}
               </span>
             </div>
-            <div style={{ fontFamily: 'var(--serif)', fontSize: 14, marginTop: 4, lineHeight: 1.2 }}>{it.n}</div>
-            <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 1 }}>{it.en}</div>
+            <div style={{ fontFamily: 'var(--serif)', fontSize: 14, marginTop: 4, lineHeight: 1.2 }}>{it.name_th}</div>
+            <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 1 }}>{it.name_en}</div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-              <span className="price thb" style={{ fontSize: 16 }}>{it.p}</span>
+              <span className="price thb" style={{ fontSize: 16 }}>{it.base_price}</span>
               <button
                 onClick={onAdd}
                 style={{

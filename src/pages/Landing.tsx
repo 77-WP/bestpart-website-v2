@@ -3,13 +3,11 @@
    1. Header: logo + lang toggle + shop-status chip
    2. Greeting + guest banner / returning name
    3. Active Order Banner  [MOCK]
-   4. Hero placeholder  [MOCK 1200×500]
-   5. Service Selection — 4 floating icon buttons  [REAL routing]
-   6. Info row — 4 floating icon buttons  [MOCK links]
+   4. Service Selection — 4 floating icon buttons  [REAL routing]
+   5. Hero placeholder  [MOCK 1200×500]
+   6. Info bar — thin secondary row  [MOCK links]
    7. Speed Order  [MOCK – Phase D]
-   8. Best Sellers  [REAL Supabase]
-   9. Bowl Circle  [static]
-  10. News & Promo horizontal scroll  [MOCK – promo_banners table ready]
+   8. News & Promo horizontal scroll  [MOCK – promo_banners table ready]
 */
 
 import { useState, useEffect } from 'react';
@@ -26,6 +24,7 @@ const MOCK_HAS_ACTIVE_ORDER = true;    // only shown when MOCK_RETURNING=true
 const MOCK_ORDER_MINUTES    = 6;
 
 /* ── Mock data ────────────────────────────────────────────── */
+
 const FREQUENT_ITEM = {
   name_th: 'ข้าวหมูแดง ไข่ดาว',
   name_en: 'BBQ Pork Rice + Egg',
@@ -51,11 +50,6 @@ function greetingPeriod() {
   if (h < 17) return 'บ่าย';
   return 'เย็น';
 }
-
-type MenuItem = {
-  id: string; name_th: string; name_en: string;
-  base_price: number; image_url: string | null; is_best_seller: boolean;
-};
 
 /* ── Hairline ─────────────────────────────────────────────── */
 function HR({ mx = 18, my = 20 }: { mx?: number; my?: number }) {
@@ -288,27 +282,37 @@ function ServiceGrid() {
   );
 }
 
-/* ══ INFO ROW (MOCK — placeholder links) ════════════════════ */
-function InfoRow() {
+/* ══ INFO BAR — thin secondary row (MOCK — placeholder links) */
+function InfoBar() {
   const navigate = useNavigate();
   const items = [
-    { icon: I.info(22),  label: 'เกี่ยวกับเรา', to: '/about'  },
-    { icon: I.pin(22),   label: 'สาขา',         to: '/branch' },
-    { icon: I.share(22), label: 'Social',        to: '/social' },
-    { icon: I.star(22),  label: 'รีวิว',        to: '/review' },
+    { icon: I.info(15),  label: 'เกี่ยวกับเรา', to: '/about'  },
+    { icon: I.pin(15),   label: 'สาขา',         to: '/branch' },
+    { icon: I.share(15), label: 'Social',        to: '/social' },
+    { icon: I.star(15),  label: 'รีวิว',        to: '/review' },
   ];
   return (
-    <div style={{ padding: '4px 14px 8px' }}>
-      <div style={{ display: 'flex' }}>
-        {items.map(it => (
-          <FloatBtn
-            key={it.to}
-            icon={it.icon}
-            label={it.label}
-            onClick={() => navigate(it.to)}
-          />
-        ))}
-      </div>
+    <div style={{
+      display: 'flex', padding: '2px 10px',
+    }}>
+      {items.map((it, idx) => (
+        <button
+          key={it.to}
+          onClick={() => navigate(it.to)}
+          style={{
+            flex: 1, background: 'none', border: 0, cursor: 'pointer',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+            padding: '8px 4px',
+            borderRight: idx < items.length - 1 ? '1px solid var(--line)' : 'none',
+          }}
+        >
+          <span style={{ color: 'var(--ink-3)', lineHeight: 1 }}>{it.icon}</span>
+          <span style={{
+            fontSize: 10.5, color: 'var(--ink-3)',
+            fontFamily: 'var(--serif)', whiteSpace: 'nowrap',
+          }}>{it.label}</span>
+        </button>
+      ))}
     </div>
   );
 }
@@ -406,112 +410,6 @@ function SpeedOrder() {
   );
 }
 
-/* ══ BEST SELLERS STRIP (REAL — Supabase query) ═════════════ */
-function BestSellersStrip() {
-  const navigate = useNavigate();
-  const [items, setItems] = useState<MenuItem[]>([]);
-
-  useEffect(() => {
-    supabase
-      .from('menu_items')
-      .select('id,name_th,name_en,base_price,image_url,is_best_seller')
-      .eq('is_active', true)
-      .eq('is_best_seller', true)
-      .order('display_order', { ascending: true })
-      .limit(4)
-      .then(({ data }) => { if (data) setItems(data as MenuItem[]); });
-  }, []);
-
-  return (
-    <div>
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-        padding: '0 18px', marginBottom: 12,
-      }}>
-        <div>
-          <div className="kicker muted" style={{ marginBottom: 2 }}>ขายดีสัปดาห์นี้</div>
-          <div className="h-display-th" style={{ fontSize: 20 }}>เมนูขายดี</div>
-        </div>
-        <button
-          onClick={() => navigate('/order')}
-          style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600, background: 'none', border: 0, cursor: 'pointer' }}
-        >ดูทั้งหมด →</button>
-      </div>
-
-      <div style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '4px 18px 6px', scrollbarWidth: 'none' }}>
-        {/* Skeletons */}
-        {items.length === 0 && Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} style={{
-            minWidth: 142, padding: 12, borderRadius: 'var(--r-md)',
-            background: 'var(--bg-2)', border: '1px solid var(--line)', flexShrink: 0,
-          }}>
-            <div style={{ width: 86, height: 86, borderRadius: 'var(--r-md)', background: 'var(--bg-3)', margin: '6px auto 8px' }} />
-            <div style={{ height: 10, borderRadius: 4, background: 'var(--bg-3)', marginBottom: 6 }} />
-            <div style={{ height: 14, borderRadius: 4, background: 'var(--bg-3)', marginBottom: 4 }} />
-            <div style={{ height: 10, width: '60%', borderRadius: 4, background: 'var(--bg-3)' }} />
-          </div>
-        ))}
-
-        {items.map((it, i) => (
-          <div key={it.id} style={{
-            minWidth: 142, padding: 12, borderRadius: 'var(--r-md)',
-            background: 'var(--bg-2)', border: '1px solid var(--line)', flexShrink: 0,
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '6px 0 8px' }}>
-              {it.image_url
-                ? <img src={it.image_url} alt={it.name_th} style={{ width: 86, height: 86, objectFit: 'cover', borderRadius: 'var(--r-md)' }} />
-                : <Bowl tone="clay" topping="egg" size={86} />}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: 'var(--accent)' }}>
-              {(i === 0 || i === 2) && I.flame(11)}
-              <span style={{ fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase' }}>
-                #{i + 1} · {(i === 0 || i === 2) ? 'hot' : 'top'}
-              </span>
-            </div>
-            <div style={{ fontFamily: 'var(--serif)', fontSize: 14, marginTop: 4, lineHeight: 1.2 }}>{it.name_th}</div>
-            <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 1 }}>{it.name_en}</div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-              <span className="price thb" style={{ fontSize: 16 }}>{it.base_price}</span>
-              <button
-                onClick={() => navigate('/order')}
-                style={{
-                  width: 28, height: 28, borderRadius: '50%',
-                  background: 'var(--ink)', color: 'var(--on-accent)', border: 0,
-                  display: 'grid', placeItems: 'center', cursor: 'pointer',
-                }}
-              >{I.plus(14)}</button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ══ BOWL CIRCLE — static "coming soon" ════════════════════ */
-function BowlCircleCard() {
-  return (
-    <div style={{ margin: '0 18px' }}>
-      <div style={{
-        padding: '20px 20px 22px', borderRadius: 'var(--r-lg)',
-        background: 'linear-gradient(135deg, var(--bg-2), var(--bg-3))',
-        border: '1px solid var(--line)', position: 'relative', overflow: 'hidden',
-      }}>
-        <div style={{ position: 'absolute', right: -24, top: -24, opacity: 0.09 }}>
-          <Bowl tone="gold" topping="" size={130} />
-        </div>
-        <div className="kicker" style={{ marginBottom: 6 }}>BOWL CIRCLE</div>
-        <div className="h-display-th" style={{ fontSize: 19, marginBottom: 6 }}>
-          กำลังเตรียมพร้อม
-        </div>
-        <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.6 }}>
-          สะสมคะแนนและรับสิทธิพิเศษ<br />สำหรับสมาชิก · Coming soon
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ══ NEWS & PROMO — horizontal scroll ══════════════════════
    Table: promo_banners (id, image_url, link_url, display_order, is_active)
    MOCK for now — replace setPromos with real Supabase query when ready    */
@@ -588,40 +486,32 @@ export default function Landing() {
         <ActiveOrderBanner minutes={MOCK_ORDER_MINUTES} />
       )}
 
-      {/* ─── 4. Hero banner ─────────────────────────────── */}
+      <HR my={14} />
+
+      {/* ─── 4. Service Selection ───────────────────────── */}
+      <ServiceGrid />
+
+      {/* ─── 5. Hero banner ─────────────────────────────── */}
       <HeroBanner />
 
       <HR />
 
-      {/* ─── 5. Service Selection ───────────────────────── */}
-      <ServiceGrid />
+      {/* ─── 6. Info bar (secondary, thin) ──────────────── */}
+      <InfoBar />
 
-      <HR mx={36} my={4} />
-
-      {/* ─── 6. Info row ────────────────────────────────── */}
-      <InfoRow />
-
-      <HR />
+      <HR my={0} />
 
       {/* ─── 7. Speed Order (returning only) ────────────── */}
       {MOCK_RETURNING && (
         <>
+          <div style={{ height: 20 }} />
           <SpeedOrder />
           <HR />
         </>
       )}
 
-      {/* ─── 8. Best sellers ────────────────────────────── */}
-      <BestSellersStrip />
-
-      <HR />
-
-      {/* ─── 9. Bowl Circle ─────────────────────────────── */}
-      <BowlCircleCard />
-
-      <HR />
-
-      {/* ─── 10. News & Promo ───────────────────────────── */}
+      {/* ─── 8. News & Promo ────────────────────────────── */}
+      <div style={{ height: 20 }} />
       <NewsPromo />
 
       <div style={{ height: 16 }} />

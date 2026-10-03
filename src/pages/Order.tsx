@@ -64,7 +64,6 @@ const CARD_BG     = 'linear-gradient(155deg, rgba(255,255,255,0.26) 0%, rgba(255
 const CARD_BORDER = '1px solid rgba(255,255,255,0.56)';
 const CARD_SHADOW = '0 2px 12px -4px rgba(120,86,32,0.14), 0 8px 28px -10px rgba(120,86,32,0.10), inset 0 1px 0 rgba(255,255,255,0.60)';
 const GLOW_BG     = 'radial-gradient(circle at 50% 46%, rgba(255,215,120,0.36) 0%, rgba(251,243,227,0) 66%)';
-const DISH_SHADOW = 'radial-gradient(ellipse at 50% 0%, rgba(50,25,0,0.18) 0%, transparent 100%)';
 
 /* ══════════════════════════════════════════════════════════
    ORDER PAGE — Chagee layout · hero+grid cards
@@ -493,14 +492,14 @@ export default function Order() {
                           border: CARD_BORDER,
                           boxShadow: CARD_SHADOW,
                           display: 'flex', alignItems: 'stretch',
-                          minHeight: 140,
+                          minHeight: 210,
                           overflow: 'hidden',
                           cursor: 'pointer',
                         }}
                       >
-                        {/* Left: image on warm glow */}
+                        {/* Left: image on warm glow — ~57% of card width */}
                         <div style={{
-                          width: 136, flexShrink: 0,
+                          width: '58%', flexShrink: 0,
                           position: 'relative',
                           background: GLOW_BG,
                         }}>
@@ -508,16 +507,16 @@ export default function Order() {
                             <img
                               src={heroItem.image_url}
                               alt={heroItem.name_th}
-                              width={136}
-                              height={154}
+                              width={200}
+                              height={230}
                               // eslint-disable-next-line @typescript-eslint/no-explicit-any
                               {...{ fetchPriority: 'high' } as any}
                               loading="eager"
                               decoding="async"
                               style={{
-                                width: '100%', height: '110%',
+                                width: '100%', height: '118%',
                                 objectFit: 'contain',
-                                marginTop: '-5%',
+                                marginTop: '-9%',
                                 opacity: 0,
                                 transition: prefersReduced ? 'none' : 'opacity 0.28s ease',
                               }}
@@ -525,26 +524,20 @@ export default function Order() {
                             />
                           ) : (
                             <div style={{ display: 'grid', placeItems: 'center', height: '100%' }}>
-                              <Bowl tone="clay" topping="egg" size={110} />
+                              <Bowl tone="clay" topping="egg" size={150} />
                             </div>
                           )}
-                          {/* Soft shadow under dish */}
-                          <div style={{
-                            position: 'absolute', bottom: 10, left: '18%', right: '18%', height: 10,
-                            background: DISH_SHADOW,
-                            pointerEvents: 'none',
-                          }} />
                         </div>
 
                         {/* Right: text content */}
                         <div style={{
                           flex: 1, minWidth: 0,
-                          padding: '14px 12px 12px 10px',
+                          padding: '16px 14px 14px 12px',
                           display: 'flex', flexDirection: 'column',
                         }}>
                           {/* แนะนำ badge */}
                           <span style={{
-                            alignSelf: 'flex-start', marginBottom: 6,
+                            alignSelf: 'flex-start', marginBottom: 8,
                             fontSize: 9, fontWeight: 700, letterSpacing: '.04em',
                             padding: '2px 8px', borderRadius: 'var(--r-pill)',
                             background: 'rgba(184,134,46,0.14)',
@@ -552,14 +545,14 @@ export default function Order() {
                           }}>แนะนำ</span>
 
                           <div style={{
-                            fontFamily: 'var(--serif)', fontSize: 17, fontWeight: 500,
-                            lineHeight: 1.22, color: 'var(--ink)',
+                            fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 500,
+                            lineHeight: 1.2, color: 'var(--ink)',
                           }}>{heroMain}</div>
                           {heroNote && (
-                            <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>{heroNote}</div>
+                            <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 3 }}>{heroNote}</div>
                           )}
                           <div style={{
-                            fontSize: 10, color: 'var(--ink-3)', marginTop: 3,
+                            fontSize: 10, color: 'var(--ink-3)', marginTop: 4,
                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                           }}>{heroItem.name_en}</div>
 
@@ -568,27 +561,27 @@ export default function Order() {
                             display: 'flex', alignItems: 'center',
                             justifyContent: 'space-between', marginTop: 'auto',
                           }}>
-                            <span className="price thb" style={{ fontSize: 18, fontFamily: 'var(--mono)', fontWeight: 600, color: 'var(--ink)' }}>
+                            <span className="price thb" style={{ fontSize: 22, fontFamily: 'var(--mono)', fontWeight: 600, color: 'var(--ink)' }}>
                               {heroItem.base_price}
                             </span>
                             <motion.button
                               whileTap={prefersReduced ? undefined : { scale: 0.88 }}
                               onClick={e => { e.stopPropagation(); openItem(heroItem.id); }}
                               style={{
-                                width: 32, height: 32, borderRadius: '50%',
+                                width: 38, height: 38, borderRadius: '50%',
                                 background: shopInfo.isOpen ? 'var(--ink)' : 'var(--bg-3)',
                                 color: shopInfo.isOpen ? 'var(--on-accent)' : 'var(--ink-3)',
                                 border: 0, display: 'grid', placeItems: 'center',
                                 cursor: 'pointer', flexShrink: 0,
                               }}
-                            >{I.plus(15)}</motion.button>
+                            >{I.plus(17)}</motion.button>
                           </div>
                         </div>
                       </motion.div>
                     )}
 
                     {/* ── Grid 2-column ───────────────────── */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                       {gridItems.map((it, gridIdx) => {
                         const { main, note } = splitParens(it.name_th);
                         const delay = Math.min(catDelay + (hasHero ? 0.08 : 0) + Math.floor(gridIdx / 2) * 0.06, 0.42);
@@ -602,7 +595,7 @@ export default function Order() {
                             whileTap={prefersReduced ? undefined : { scale: 0.96 }}
                             onClick={() => openItem(it.id)}
                             style={{
-                              borderRadius: 16,
+                              borderRadius: 14,
                               background: CARD_BG,
                               border: CARD_BORDER,
                               boxShadow: CARD_SHADOW,
@@ -611,7 +604,7 @@ export default function Order() {
                               cursor: 'pointer',
                             }}
                           >
-                            {/* Image on glow */}
+                            {/* Image on glow — 25% smaller area */}
                             <div style={{
                               position: 'relative',
                               width: '100%', aspectRatio: '1',
@@ -619,9 +612,9 @@ export default function Order() {
                             }}>
                               {it.is_best_seller && (
                                 <span style={{
-                                  position: 'absolute', top: 6, left: 6, zIndex: 2,
-                                  fontSize: 8, fontWeight: 700, letterSpacing: '.05em',
-                                  padding: '1px 5px', borderRadius: 3,
+                                  position: 'absolute', top: 5, left: 5, zIndex: 2,
+                                  fontSize: 7, fontWeight: 700, letterSpacing: '.05em',
+                                  padding: '1px 4px', borderRadius: 3,
                                   background: 'var(--accent)', color: '#fff',
                                 }}>BEST</span>
                               )}
@@ -629,14 +622,14 @@ export default function Order() {
                                 <img
                                   src={it.image_url}
                                   alt={it.name_th}
-                                  width={160}
-                                  height={160}
+                                  width={120}
+                                  height={120}
                                   loading="lazy"
                                   decoding="async"
                                   style={{
-                                    width: '86%', height: '86%',
+                                    width: '64%', height: '64%',
                                     objectFit: 'contain',
-                                    margin: '7%',
+                                    margin: '18%',
                                     display: 'block',
                                     opacity: 0,
                                     transition: prefersReduced ? 'none' : 'opacity 0.3s ease',
@@ -645,24 +638,18 @@ export default function Order() {
                                 />
                               ) : (
                                 <div style={{ display: 'grid', placeItems: 'center', height: '100%' }}>
-                                  <Bowl tone="clay" topping="egg" size={80} />
+                                  <Bowl tone="clay" topping="egg" size={64} />
                                 </div>
                               )}
-                              {/* Shadow under dish */}
-                              <div style={{
-                                position: 'absolute', bottom: 6, left: '20%', right: '20%', height: 8,
-                                background: DISH_SHADOW,
-                                pointerEvents: 'none',
-                              }} />
                             </div>
 
                             {/* Text content */}
                             <div style={{
-                              padding: '8px 9px 10px',
+                              padding: '6px 7px 8px',
                               flex: 1, display: 'flex', flexDirection: 'column',
                             }}>
                               <div style={{
-                                fontFamily: 'var(--serif)', fontSize: 12.5, lineHeight: 1.3,
+                                fontFamily: 'var(--serif)', fontSize: 11.5, lineHeight: 1.3,
                                 color: 'var(--ink)',
                                 display: '-webkit-box',
                                 WebkitLineClamp: 2,
@@ -671,29 +658,29 @@ export default function Order() {
                               }}>{main}</div>
                               {note && (
                                 <div style={{
-                                  fontSize: 10, color: 'var(--ink-3)', marginTop: 2,
+                                  fontSize: 9.5, color: 'var(--ink-3)', marginTop: 2,
                                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                                 }}>{note}</div>
                               )}
 
                               <div style={{
                                 display: 'flex', alignItems: 'center',
-                                justifyContent: 'space-between', marginTop: 'auto', paddingTop: 8,
+                                justifyContent: 'space-between', marginTop: 'auto', paddingTop: 6,
                               }}>
-                                <span className="price thb" style={{ fontSize: 14, fontFamily: 'var(--mono)' }}>
+                                <span className="price thb" style={{ fontSize: 13, fontFamily: 'var(--mono)' }}>
                                   {it.base_price}
                                 </span>
                                 <motion.button
                                   whileTap={prefersReduced ? undefined : { scale: 0.88 }}
                                   onClick={e => { e.stopPropagation(); openItem(it.id); }}
                                   style={{
-                                    width: 28, height: 28, borderRadius: '50%',
+                                    width: 24, height: 24, borderRadius: '50%',
                                     background: shopInfo.isOpen ? 'var(--ink)' : 'var(--bg-3)',
                                     color: shopInfo.isOpen ? 'var(--on-accent)' : 'var(--ink-3)',
                                     border: 0, display: 'grid', placeItems: 'center',
                                     cursor: 'pointer', flexShrink: 0,
                                   }}
-                                >{I.plus(13)}</motion.button>
+                                >{I.plus(11)}</motion.button>
                               </div>
                             </div>
                           </motion.div>

@@ -33,8 +33,9 @@ export default function Pay() {
   const { orderId } = useParams<{ orderId: string }>();
   const navigate    = useNavigate();
   const [state, setState] = useState<QrState>({ phase: 'loading' });
-  const pollingRef  = useRef<ReturnType<typeof setInterval> | null>(null);
-  const paidRef     = useRef(false);
+  const pollingRef      = useRef<ReturnType<typeof setInterval> | null>(null);
+  const paidRef         = useRef(false);
+  const autoFetchedRef  = useRef(false); // prevents StrictMode double-invoke on mount
 
   const expiresAt = state.phase === 'ready' ? state.expiresAt : null;
   const countdown = useCountdown(expiresAt);
@@ -81,8 +82,12 @@ export default function Pay() {
     }
   }, [orderId]);
 
-  /* Initial QR load */
-  useEffect(() => { fetchQr(); }, [fetchQr]);
+  /* Initial QR load — guarded so StrictMode double-mount only fires once */
+  useEffect(() => {
+    if (autoFetchedRef.current) return;
+    autoFetchedRef.current = true;
+    fetchQr();
+  }, [fetchQr]);
 
   /* Mark expired when countdown hits 0 */
   useEffect(() => {

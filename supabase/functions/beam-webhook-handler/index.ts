@@ -84,11 +84,13 @@ serve(async (req: Request) => {
 
   try {
     const payload = JSON.parse(rawBody);
-    const chargeId: string = payload.chargeId;
+    const referenceId: string = payload.referenceId; // set to orders.id when charge was created
     const reportedAmountSatang: number = payload.amount; // already in satang
 
-    if (!chargeId) {
-      console.error("Webhook payload missing chargeId");
+    // referenceId must be a UUID — anything else is not our order, skip silently
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!referenceId || !UUID_RE.test(referenceId)) {
+      console.log("Webhook referenceId is not a UUID, skipping:", referenceId);
       return new Response("OK", { status: 200 });
     }
 
@@ -97,17 +99,17 @@ serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // ── Find order by beam_charge_id (not by order_id from body) ──
+    // ── Find order by referenceId (= orders.id, set when charge was created) ──
     const { data: order, error: findErr } = await supabase
       .from("orders")
-      .select("id, status, payment_status, grand_total, customer_phone, customer_id")
-      .eq("beam_charge_id", chargeId)
+      .select("id, status, payment_status, grand_total")
+      .eq("id", referenceId)
       .single();
 
     if (findErr || !order) {
-      console.error("Order not found for chargeId", chargeId, findErr?.message);
-      // Acknowledge so Beam doesn't retry for an unknown charge
-      return new Response("OK", { status: 200 });
+      console.error("Order not found for referenceId", referenceId, findErr?.message);
+      // Return 500 so Beam retries — verified payload pointing to a missing order is unexpected
+      return new Response("Order not found", { status: 500 });
     }
 
     // ── Amount verification ──────────────────────────────────
@@ -116,8 +118,8 @@ serve(async (req: Request) => {
       console.error(
         `Amount mismatch for order ${order.id}: Beam=${reportedAmountSatang} expected=${expectedSatang}`,
       );
-      // Return 500 to trigger Beam retry (could be a data race)
-      return new Response("Amount mismatch", { status: 500 });
+      // Acknowledge without updating — mismatch is not transient, retrying won't help
+      return new Response("OK", { status: 200 });
     }
 
     // ── Idempotent UPDATE (only if still awaiting_payment) ──
@@ -144,23 +146,17 @@ serve(async (req: Request) => {
 
     // (a) Customer recognition upsert
     await (async () => {
-      // Try to find phone: prefer direct customer_phone column, else via customer_id FK
-      let phone: string | null = order.customer_phone ?? null;
+      // Read phone from order_contacts (written by Checkout at order creation)
+      const { data: contact } = await supabase
+        .from("order_contacts")
+        .select("phone")
+        .eq("order_id", order.id)
+        .single();
 
-      if (!phone && order.customer_id) {
-        const { data: cust } = await supabase
-          .from("customers")
-          .select("phone")
-          .eq("id", order.customer_id)
-          .single();
-        phone = cust?.phone ?? null;
-      }
+      const phone: string | null = contact?.phone ?? null;
 
       if (!phone) {
-        // Neither customer_phone column nor customers table reference found on order.
-        // REPORT: orders table does not currently store customer phone.
-        // Wire up after Checkout UI saves customer_phone to orders.
-        console.log(`customer_recognition skipped for order ${order.id}: no phone found`);
+        console.log(`customer_recognition skipped for order ${order.id}: no phone in order_contacts`);
         return;
       }
 

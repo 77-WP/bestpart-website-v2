@@ -141,17 +141,27 @@ serve(async (req: Request) => {
     if (order.beam_charge_id) {
       try {
         const existing = await beamGet(order.beam_charge_id);
-        if (existing.status === "PENDING" && existing.encodedImage?.imageBase64Encoded) {
-          // Return existing QR — do NOT create a new charge
-          return json({
-            charge_id:  existing.chargeId,
-            qr_image:   existing.encodedImage.imageBase64Encoded,
-            expires_at: existing.encodedImage.expiry,
-            amount:     amountSatang,
-          });
+
+        if (existing.status === "SUCCEEDED") {
+          // Payment already went through — do not create a new charge
+          return err("Payment already completed for this order", 422);
         }
-        // FAILED (includes expired QR) or SUCCEEDED without payment_status update yet:
-        // fall through to create a new charge
+
+        if (existing.status === "PENDING" && existing.encodedImage?.imageBase64Encoded) {
+          const expiry = existing.encodedImage.expiry;
+          const isExpired = expiry ? new Date(expiry).getTime() <= Date.now() : false;
+          if (!isExpired) {
+            // Still valid — return existing QR, do NOT create a new charge or overwrite beam_charge_id
+            return json({
+              charge_id:  existing.chargeId,
+              qr_image:   existing.encodedImage.imageBase64Encoded,
+              expires_at: expiry,
+              amount:     amountSatang,
+            });
+          }
+          // Expired PENDING — fall through to create a new charge
+        }
+        // FAILED or expired → fall through to create a new charge
       } catch (e) {
         console.error("Could not fetch existing charge, will create new:", e);
       }

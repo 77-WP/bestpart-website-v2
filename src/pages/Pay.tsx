@@ -56,7 +56,16 @@ export default function Pay() {
         body: { order_id: orderId },
       });
       if (error || !data) {
-        setState({ phase: 'error', message: error?.message ?? 'ไม่สามารถสร้าง QR ได้' });
+        const rawMsg = error?.message ?? 'ไม่สามารถสร้าง QR ได้';
+        // FunctionsHttpError carries the edge function's response body in .context
+        const context = (error as unknown as { context?: { body?: string; status?: number } })?.context;
+        const detail  = context?.body ? ` — ${context.body}` : '';
+        const status  = context?.status ? ` (HTTP ${context.status})` : '';
+        console.error('[create-beam-charge] failed:', { message: rawMsg, context });
+        setState({
+          phase:   'error',
+          message: TEST_MODE ? `[create-beam-charge] ${rawMsg}${status}${detail}` : 'ไม่สามารถสร้าง QR ได้',
+        });
         return;
       }
       setState({

@@ -30,7 +30,7 @@ export function shopCloseLabel(): string {
 export interface TimeSlot {
   label:  string;
   sub:    string;
-  value:  string; // sent as pickup_time to DB: "โดยเร็วที่สุด" | "HH:MM"
+  value:  string | null; // null = ASAP (DB pickup_time = NULL), "HH:MM" for fixed slots
   isAsap?: boolean;
 }
 
@@ -78,11 +78,11 @@ export function computeSlots(): ShopInfo {
 
   const slots: TimeSlot[] = [];
 
-  // "พร้อมเร็วสุด"
+  // "พร้อมเร็วสุด" — value null → DB stores NULL for pickup_time
   slots.push({
     label:  'พร้อมเร็วสุด',
     sub:    `~${SHOP.prepMinutes} นาที`,
-    value:  'โดยเร็วที่สุด',
+    value:  null,
     isAsap: true,
   });
 

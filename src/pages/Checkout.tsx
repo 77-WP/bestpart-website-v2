@@ -111,15 +111,25 @@ export default function Checkout() {
         fulfillment_type:        FULFILLMENT_MAP[method] ?? 'takeaway',
         checkout_payment_method: isBeam ? 'promptpay' : 'cash',
         internal_notes:          isBeam ? null : 'จ่ายที่ร้าน',
-        pickup_time:             selectedSlot?.value ?? 'โดยเร็วที่สุด',
+        pickup_time:             selectedSlot?.value ?? null,
         source:                  'web',
       })
       .select('id')
       .single();
 
     if (dbError || !data) {
+      console.error('[INSERT orders] failed:', {
+        message: dbError?.message,
+        code:    dbError?.code,
+        details: dbError?.details,
+        hint:    dbError?.hint,
+      });
       setLoading(false);
-      setError('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
+      setError(
+        TEST_MODE && dbError
+          ? `[INSERT orders] ${dbError.message}${dbError.code ? ` / ${dbError.code}` : ''}`
+          : 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง'
+      );
       return;
     }
 
@@ -130,7 +140,12 @@ export default function Checkout() {
       .from('order_contacts')
       .insert({ order_id: orderId, name: name.trim(), phone: digitsOnly(phone) })
       .then(({ error: contactErr }) => {
-        if (contactErr) console.error('order_contacts insert failed:', contactErr.message);
+        if (contactErr) console.error('[INSERT order_contacts] failed:', {
+          message: contactErr.message,
+          code:    contactErr.code,
+          details: contactErr.details,
+          hint:    contactErr.hint,
+        });
       });
 
     clear();

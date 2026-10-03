@@ -9,10 +9,7 @@ export default function Cart() {
   const { items, remove, setQty, clear } = useCart();
   const navigate = useNavigate();
 
-  const subtotal = cartTotal(items);
-  const discount = subtotal >= 200 ? 20 : 0;
-  const packaging = items.length > 0 ? 5 : 0;
-  const total = subtotal - discount + packaging;
+  const total = cartTotal(items);
 
   if (items.length === 0) {
     return (
@@ -147,35 +144,9 @@ export default function Cart() {
         </div>
       </div>
 
-      {/* Promo */}
+      {/* Total */}
       <div style={{ padding: '18px 18px 0' }}>
-        <div style={{
-          padding: '12px 14px', borderRadius: 'var(--r-md)',
-          background: 'var(--bg-3)', display: 'flex', alignItems: 'center', gap: 10,
-        }}>
-          <span style={{ color: 'var(--accent-2)' }}>{I.leaf(18)}</span>
-          <span style={{ flex: 1, fontSize: 12 }}>
-            ใช้โค้ด <b style={{ fontFamily: 'var(--mono)' }}>NEWBOWL</b> ลด ฿20
-          </span>
-          <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>ใช้</span>
-        </div>
-      </div>
-
-      {/* Totals */}
-      <div style={{ padding: '18px 18px 0', fontSize: 12 }}>
-        {[
-          { label: 'รวม', value: subtotal },
-          ...(discount > 0 ? [{ label: 'ส่วนลด NEWBOWL', value: -discount }] : []),
-          { label: 'ค่าบรรจุภัณฑ์', value: packaging },
-        ].map(({ label, value }, i) => (
-          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', color: 'var(--ink-2)' }}>
-            <span>{label}</span>
-            <span className="thb" style={{ fontFamily: 'var(--mono)' }}>
-              {value < 0 ? `-${Math.abs(value)}` : value}
-            </span>
-          </div>
-        ))}
-        <div style={{ height: 1, background: 'var(--line)', margin: '8px 0' }} />
+        <div style={{ height: 1, background: 'var(--line)', marginBottom: 10 }} />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
           <span style={{ fontFamily: 'var(--serif)', fontSize: 14 }}>ยอดรวม · TOTAL</span>
           <span className="thb price" style={{ fontSize: 24 }}>{total}</span>

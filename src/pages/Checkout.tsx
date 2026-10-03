@@ -3,18 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { useCart, cartTotal, itemTotal } from '../store/cart';
 import { supabase } from '../lib/supabase';
 import { I } from '../components/icons';
+import { SHOP, shopCloseLabel, computeSlots } from '../config/shop';
 
 const METHODS = [
   { id: 'dine',     label: 'ทานที่ร้าน', labelEn: 'Dine-in' },
   { id: 'takeaway', label: 'รับกลับ',    labelEn: 'Takeaway' },
   { id: 'curbside', label: 'ถึงรถ',      labelEn: 'Curbside' },
-];
-
-const TIME_SLOTS = [
-  { label: 'พร้อมเร็วสุด', sub: '~12 นาที', hot: true },
-  { label: '19:00', sub: 'ใน 25 นาที' },
-  { label: '19:15', sub: 'ใน 40 นาที' },
-  { label: '19:30', sub: 'ใน 55 นาที' },
 ];
 
 const PAYMENT_OPTS = [
@@ -28,22 +22,55 @@ const FULFILLMENT_MAP: Record<string, string> = {
   curbside: 'curbside',
 };
 
+/* ── input shared style ──────────────────────────────────── */
+const inputBase: React.CSSProperties = {
+  width: '100%',
+  background: 'var(--bg-2)',
+  border: '1px solid var(--line)',
+  borderRadius: 'var(--r-sm)',
+  padding: '12px 14px',
+  fontFamily: 'var(--sans)',
+  fontSize: 14,
+  color: 'var(--ink)',
+  outline: 'none',
+};
+
+/* ── phone helpers ───────────────────────────────────────── */
+function digitsOnly(v: string) { return v.replace(/\D/g, ''); }
+function isPhoneOk(v: string)  { return /^\d{10}$/.test(digitsOnly(v)); }
+
 export default function Checkout() {
   const navigate = useNavigate();
   const { items, clear } = useCart();
 
+  /* compute once at mount — slots depend on current Bangkok time */
+  const [shopInfo] = useState(() => computeSlots());
+
   const [method,    setMethod]  = useState('takeaway');
   const [timeSlot,  setTime]    = useState(0);
   const [payment,   setPayment] = useState('promptpay');
-  const [loading,   setLoading] = useState(false);
-  const [error,     setError]   = useState<string | null>(null);
 
-  const subtotal  = cartTotal(items);
-  const discount  = subtotal >= 200 ? 20 : 0;
-  const packaging = 5;
-  const total     = subtotal - discount + packaging;
+  const [name,      setName]    = useState('');
+  const [phone,     setPhone]   = useState('');
+  const [nameTouched,  setNameTouched]  = useState(false);
+  const [phoneTouched, setPhoneTouched] = useState(false);
+
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
+
+  const subtotal = cartTotal(items);
+  const total    = subtotal; // no packaging, no discount
+
+  const nameOk  = name.trim().length > 0;
+  const phoneOk = isPhoneOk(phone);
+  const canSubmit = shopInfo.isOpen && nameOk && phoneOk && !loading;
 
   async function handleConfirm() {
+    /* ensure all fields touched so errors become visible */
+    setNameTouched(true);
+    setPhoneTouched(true);
+    if (!canSubmit) return;
+
     setLoading(true);
     setError(null);
 
@@ -59,18 +86,21 @@ export default function Checkout() {
       addons:     it.addons,
     }));
 
+    const selectedSlot = shopInfo.slots[timeSlot];
+
     const { data, error: dbError } = await supabase
       .from('orders')
       .insert({
         items:                   orderItems,
         subtotal:                subtotal,
-        discount_amount:         discount,
-        delivery_fee:            packaging,
+        discount_amount:         0,
+        delivery_fee:            0,
         grand_total:             total,
         status:                  'pending',
         payment_status:          'pending',
         fulfillment_type:        FULFILLMENT_MAP[method] ?? 'takeaway',
         checkout_payment_method: payment,
+        pickup_time:             selectedSlot?.value ?? 'โดยเร็วที่สุด',
         source:                  'web',
       })
       .select('id')
@@ -141,8 +171,10 @@ export default function Checkout() {
           }}>{I.pin(18)}</div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '.06em', textTransform: 'uppercase' }}>รับที่</div>
-            <div style={{ fontFamily: 'var(--serif)', fontSize: 14 }}>สาขาทองหล่อ ซอย 13</div>
-            <div style={{ fontSize: 11, color: 'var(--ink-2)', marginTop: 1 }}>เปิดถึง 22:00 · 1.2 กม.</div>
+            <div style={{ fontFamily: 'var(--serif)', fontSize: 14 }}>{SHOP.branchName}</div>
+            <div style={{ fontSize: 11, color: 'var(--ink-2)', marginTop: 1 }}>
+              เปิดถึง {shopCloseLabel()} · 1.2 กม.
+            </div>
           </div>
           <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>เปลี่ยน</span>
         </div>
@@ -151,60 +183,101 @@ export default function Checkout() {
       {/* Time */}
       <div style={{ padding: '18px 18px 0' }}>
         <div className="kicker muted" style={{ marginBottom: 8 }}>เวลารับ · PICKUP TIME</div>
-        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginRight: -18, paddingRight: 18 }}>
-          {TIME_SLOTS.map((s, i) => (
-            <button
-              key={i}
-              onClick={() => setTime(i)}
-              style={{
-                padding: '10px 14px', borderRadius: 'var(--r-md)',
-                border: i === timeSlot ? '1.5px solid var(--ink)' : '1px solid var(--line)',
-                background: i === timeSlot ? 'var(--bg-2)' : 'var(--bg)',
-                minWidth: 108, textAlign: 'left', flexShrink: 0,
-              }}
-            >
-              <div style={{
-                fontFamily: 'var(--serif)', fontSize: 13,
-                color: i === timeSlot ? 'var(--ink)' : 'var(--ink-2)',
-                display: 'flex', alignItems: 'center', gap: 4,
-              }}>
-                {s.hot && <span style={{ color: 'var(--accent)' }}>{I.flame(12)}</span>}
-                {s.label}
-              </div>
-              <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 2 }}>{s.sub}</div>
-            </button>
-          ))}
-        </div>
+
+        {shopInfo.isOpen ? (
+          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginRight: -18, paddingRight: 18 }}>
+            {shopInfo.slots.map((s, i) => (
+              <button
+                key={i}
+                onClick={() => setTime(i)}
+                style={{
+                  padding: '10px 14px', borderRadius: 'var(--r-md)',
+                  border: i === timeSlot ? '1.5px solid var(--ink)' : '1px solid var(--line)',
+                  background: i === timeSlot ? 'var(--bg-2)' : 'var(--bg)',
+                  minWidth: 108, textAlign: 'left', flexShrink: 0,
+                }}
+              >
+                <div style={{
+                  fontFamily: 'var(--serif)', fontSize: 13,
+                  color: i === timeSlot ? 'var(--ink)' : 'var(--ink-2)',
+                  display: 'flex', alignItems: 'center', gap: 4,
+                }}>
+                  {s.isAsap && <span style={{ color: 'var(--accent)' }}>{I.flame(12)}</span>}
+                  {s.label}
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 2 }}>{s.sub}</div>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div style={{
+            padding: '12px 14px', borderRadius: 'var(--r-md)',
+            background: 'rgba(43,33,24,0.06)', border: '1px solid var(--line)',
+            fontSize: 13, color: 'var(--ink-2)',
+          }}>
+            <span style={{ fontWeight: 600, color: 'var(--ink)' }}>ร้านปิดอยู่</span>
+            {' · เปิดครั้งถัดไป '}
+            <span style={{ fontFamily: 'var(--mono)', fontWeight: 600 }}>{shopInfo.nextOpenMsg}</span>
+          </div>
+        )}
       </div>
 
       {/* Contact */}
       <div style={{ padding: '18px 18px 0' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
           <div className="kicker muted">ผู้รับ · CONTACT</div>
           <span style={{
             fontSize: 9.5, fontWeight: 700, letterSpacing: '.05em', color: 'var(--accent-2)',
             background: 'rgba(74,93,63,0.14)', padding: '3px 8px', borderRadius: 'var(--r-pill)',
           }}>สั่งแบบไม่ต้องสมัคร</span>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <div style={{
-            flex: 1, padding: '12px 14px', borderRadius: 'var(--r-sm)',
-            border: '1px solid var(--line)', background: 'var(--bg-2)',
-          }}>
-            <div style={{ fontSize: 10, color: 'var(--ink-3)' }}>ชื่อ</div>
-            <div style={{ fontFamily: 'var(--serif)', fontSize: 13, marginTop: 2 }}>คุณภพ</div>
-          </div>
-          <div style={{
-            flex: 1.2, padding: '12px 14px', borderRadius: 'var(--r-sm)',
-            border: '1.5px solid var(--ink)', background: 'var(--bg-2)',
-          }}>
-            <div style={{ fontSize: 10, color: 'var(--ink-3)' }}>เบอร์โทร</div>
-            <div style={{ fontFamily: 'var(--mono)', fontSize: 13, marginTop: 2 }}>089 •••• 4471</div>
-          </div>
+
+        {/* Name */}
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 10, color: 'var(--ink-3)', marginBottom: 4 }}>ชื่อ</div>
+          <input
+            type="text"
+            placeholder="ชื่อผู้รับ"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            onBlur={() => setNameTouched(true)}
+            style={{
+              ...inputBase,
+              border: nameTouched && !nameOk ? '1.5px solid var(--accent)' : '1px solid var(--line)',
+            }}
+          />
+          {nameTouched && !nameOk && (
+            <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4 }}>กรุณากรอกชื่อ</div>
+          )}
         </div>
-        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ color: 'var(--accent-2)' }}>{I.check(13)}</span>
-          <span style={{ fontSize: 10.5, color: 'var(--ink-3)' }}>เราจะจำเบอร์นี้ไว้เพื่อให้สั่งซ้ำได้เร็วขึ้นครั้งหน้า</span>
+
+        {/* Phone */}
+        <div>
+          <div style={{ fontSize: 10, color: 'var(--ink-3)', marginBottom: 4 }}>เบอร์โทร</div>
+          <input
+            type="tel"
+            placeholder="0812345678"
+            value={phone}
+            onChange={e => setPhone(e.target.value)}
+            onBlur={() => setPhoneTouched(true)}
+            style={{
+              ...inputBase,
+              fontFamily: 'var(--mono)',
+              border: phoneTouched && !phoneOk ? '1.5px solid var(--accent)' : '1px solid var(--line)',
+            }}
+          />
+          {phoneTouched && !phoneOk && (
+            <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4 }}>
+              {phone.trim() === '' ? 'กรุณากรอกเบอร์โทร' : 'เบอร์ต้องเป็นตัวเลข 10 หลัก'}
+            </div>
+          )}
+        </div>
+
+        <div style={{ marginTop: 10, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+          <span style={{ color: 'var(--accent-2)', flexShrink: 0, marginTop: 1 }}>{I.check(12)}</span>
+          <span style={{ fontSize: 10.5, color: 'var(--ink-3)', lineHeight: 1.55 }}>
+            เก็บเบอร์และประวัติการสั่งเพื่อพัฒนาบริการ ใช้เพื่อ Best Part เท่านั้น
+          </span>
         </div>
       </div>
 
@@ -242,16 +315,6 @@ export default function Checkout() {
           <span>{items.reduce((s, i) => s + i.qty, 0)} รายการ</span>
           <span className="thb" style={{ fontFamily: 'var(--mono)' }}>{subtotal}</span>
         </div>
-        {discount > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--accent-2)' }}>
-            <span>ส่วนลด</span>
-            <span className="thb" style={{ fontFamily: 'var(--mono)' }}>-{discount}</span>
-          </div>
-        )}
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span>ค่าบรรจุภัณฑ์</span>
-          <span className="thb" style={{ fontFamily: 'var(--mono)' }}>{packaging}</span>
-        </div>
       </div>
 
       {/* Sticky pay button */}
@@ -263,23 +326,26 @@ export default function Checkout() {
         {error && (
           <div style={{
             marginBottom: 10, padding: '10px 14px', borderRadius: 'var(--r-md)',
-            background: 'rgba(178,58,31,0.10)', color: 'var(--danger)',
+            background: 'rgba(178,58,31,0.10)', color: 'var(--accent)',
             fontSize: 12, textAlign: 'center',
           }}>{error}</div>
         )}
         <button
           onClick={handleConfirm}
-          disabled={loading}
+          disabled={!canSubmit}
           style={{
-            width: '100%', background: loading ? 'var(--ink-3)' : 'var(--accent)',
+            width: '100%',
+            background: canSubmit ? 'var(--accent)' : 'var(--ink-3)',
             color: 'var(--on-accent)',
             border: 0, padding: '16px 18px', borderRadius: 'var(--r-pill)',
             fontWeight: 600, fontSize: 13, letterSpacing: '.04em',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            cursor: loading ? 'not-allowed' : 'pointer',
+            cursor: canSubmit ? 'pointer' : 'not-allowed',
           }}
         >
-          <span>{loading ? 'กำลังสร้างออเดอร์…' : 'ยืนยันและชำระเงิน'}</span>
+          <span>
+            {loading ? 'กำลังสร้างออเดอร์…' : !shopInfo.isOpen ? 'ร้านปิดอยู่' : 'ยืนยันและชำระเงิน'}
+          </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span className="thb" style={{ fontFamily: 'var(--mono)', fontSize: 16 }}>{total}</span>
             {I.arrow(14)}

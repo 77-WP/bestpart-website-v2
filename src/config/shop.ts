@@ -15,7 +15,7 @@ export const SHOP = {
   /** Kitchen prep time used to offset the earliest pickup slot */
   prepMinutes: 12,
 
-  branchName:  'สาขาทองหล่อ ซอย 13',
+  branchName:  'สาขามีนบุรี ถนนสามวา',
 } as const;
 
 /** "21:00" */

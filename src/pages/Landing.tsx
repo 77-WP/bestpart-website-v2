@@ -4,6 +4,7 @@ import { Brand } from '../components/Brand';
 import { TabBar } from '../components/TabBar';
 import { I } from '../components/icons';
 import { LINKS } from '../config/links';
+import { SHOP } from '../config/shop';
 
 /* ── Greeting by time-of-day ────────────────────────────── */
 function getGreeting() {
@@ -282,7 +283,7 @@ export default function Landing() {
       {/* ── f) Footer ────────────────────────────────────── */}
       <div style={{ padding: '4px 18px 16px', textAlign: 'center' }}>
         <span style={{ fontSize: 11, color: 'var(--ink-3)', letterSpacing: '.06em' }}>
-          BEST PART BOWLS · สาขาทองหล่อ
+          BEST PART BOWLS · {SHOP.branchName}
         </span>
       </div>
 
@@ -330,7 +331,7 @@ export default function Landing() {
             <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.8 }}>
               เราคือร้านอาหารไทยสไตล์โบลว์ เสิร์ฟเมนูจานเดี่ยวรสจัดจ้าน
               ที่ปรุงสดทุกออเดอร์ ส่วนผสมคัดเองทุกวัน
-              สาขาทองหล่อ ซอย 13 เปิดทุกวัน 11:00–22:00
+              {SHOP.branchName} เปิดทุกวัน 11:00–22:00
             </div>
           </div>
         </BottomSheet>

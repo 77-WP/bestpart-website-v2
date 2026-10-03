@@ -16,13 +16,13 @@ type MenuItemRow = {
   is_best_seller: boolean;
   is_active: boolean;
   category_id: string;
-  description: string | null;
+  description_th: string | null;
 };
 
 const TEST_ITEM_ROW: MenuItemRow = {
   id: 'test-1baht', name_th: 'ทดสอบ ฿1', name_en: 'Test Item ฿1',
   base_price: 1, image_url: null, is_best_seller: false,
-  is_active: true, category_id: '', description: null,
+  is_active: true, category_id: '', description_th: null,
 };
 
 /* ── Options (hardcode — TODO: move to DB menu_item_option_groups table) ── */
@@ -109,11 +109,20 @@ export function ProductSheet({ isShopOpen, categories }: Props) {
 
     supabase
       .from('menu_items')
-      .select('id, name_th, name_en, base_price, image_url, is_best_seller, is_active, category_id, description')
+      .select('id, name_th, name_en, base_price, image_url, is_best_seller, is_active, category_id, description_th')
       .eq('id', itemId)
       .single()
-      .then(({ data }) => {
-        if (!data) { setPhase('not_found'); return; }
+      .then(({ data, error }) => {
+        if (!data) {
+          console.error('menu_items single query failed', {
+            message: error?.message,
+            code: error?.code,
+            details: error?.details,
+            hint: error?.hint,
+          });
+          setPhase('not_found');
+          return;
+        }
         setItem(data as MenuItemRow);
         setPhase('ready');
       });
@@ -293,7 +302,7 @@ export function ProductSheet({ isShopOpen, categories }: Props) {
                 </div>
 
                 {/* Description */}
-                {item.description && (
+                {item.description_th && (
                   <div style={{ marginTop: 10 }}>
                     <div style={{
                       fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.7,
@@ -304,9 +313,9 @@ export function ProductSheet({ isShopOpen, categories }: Props) {
                         overflow: 'hidden',
                       }),
                     }}>
-                      {item.description}
+                      {item.description_th}
                     </div>
-                    {item.description.length > 70 && (
+                    {item.description_th.length > 70 && (
                       <button
                         onClick={() => setDescExpanded(e => !e)}
                         style={{

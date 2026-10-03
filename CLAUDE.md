@@ -1,0 +1,13 @@
+# Best Part Ordering (BPO v1) — กฎของโปรเจกต์
+- Stack: React + TypeScript + Vite + Tailwind. Backend: Supabase (Postgres, Realtime, Edge Functions). Deploy: git push main แล้ว Vercel build ให้เอง
+- เจ้าของโปรเจกต์ไม่ใช่ developer ตอบภาษาไทยสั้นๆ รายงานสรุปไม่ยาว
+- จบงานโค้ดทุกครั้งด้วย npm run build && git add -A && git commit && git push (ยกเว้นงานที่สั่งว่าอ่านอย่างเดียว)
+- ห้ามพิมพ์ ห้าม commit ห้ามใส่ secret/key ในโค้ด ไฟล์ .env* ต้องอยู่ใน .gitignore
+- ห้ามแก้ถ้าไม่ได้สั่งตรงๆ: Checkout (ส่วน INSERT orders และ order_contacts), Pay.tsx, Edge Functions (create-beam-charge, beam-webhook-handler, notify-new-order) การ deploy Edge Function เจ้าของทำเอง
+- ตั้งค่ากลาง: src/config/shop.ts (เวลาร้าน, prepMinutes, branchName), src/config/links.ts (ลิงก์ภายนอก), src/config/env.ts (TEST_MODE, ENABLE_BEAM) TEST_MODE ใช้ได้เฉพาะ .env.local ห้ามตั้งใน Vercel
+- Supabase ใช้ร่วมกับเว็บ v1, Command Center v1 และ Cupid ห้ามเปลี่ยนโครงสร้างตารางที่ใช้ร่วม เจ้าของรัน SQL เองใน SQL Editor ให้เขียน SQL ส่งให้ ห้ามรันเอง
+- สถานะออเดอร์: awaiting_payment (Beam, ครัวไม่เห็น) → pending → preparing → completed (Command Center v1 ยังใช้ pending_line ด้วย)
+- orders ปัจจุบัน anon อ่านได้ทุกแถว (ปัญหาที่รู้แล้ว รอแก้ใน v1.1) ห้ามเปลี่ยน RLS เอง
+- ขอบเขต v1: ไม่มี CRM, สั่งซ้ำ, loyalty, phone recognition
+- สไตล์: Gold & Cream, DM Sans + Noto Serif Thai เรียบ ไม่มีเงาหนัก ปุ่มแตะขั้นต่ำ 44px รองรับ iPhone safe-area
+- งานที่สั่งว่า "อ่านอย่างเดียว" ห้ามแก้ไฟล์และห้าม commit

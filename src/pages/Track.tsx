@@ -4,7 +4,7 @@ import { supabase, STATUS_STEP, type OrderRow } from '../lib/supabase';
 import { Bowl } from '../components/Bowl';
 import { TabBar } from '../components/TabBar';
 import { I } from '../components/icons';
-import { shopCloseLabel } from '../config/shop';
+import { SHOP, shopCloseLabel } from '../config/shop';
 import { TEST_MODE } from '../config/env';
 
 /* ── Status → UI config ─────────────────────────────────── */
@@ -257,7 +257,7 @@ export default function Track() {
 
         {/* Subtitle */}
         <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 14, letterSpacing: '.06em' }}>
-          {status === 'ready' ? 'รับได้แล้ว · สาขาทองหล่อ ซอย 13' : `สั่งเวลา ${timeStr} · สาขาทองหล่อ`}
+          {status === 'ready' ? `รับได้แล้ว · ${SHOP.branchName}` : `สั่งเวลา ${timeStr} · ${SHOP.branchName}`}
         </div>
 
         {/* Branch strip */}
@@ -269,7 +269,7 @@ export default function Track() {
           }}>
             <span style={{ color: 'var(--accent-2)' }}>{I.pin(18)}</span>
             <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: 'var(--serif)', fontSize: 13 }}>สาขาทองหล่อ ซอย 13</div>
+              <div style={{ fontFamily: 'var(--serif)', fontSize: 13 }}>{SHOP.branchName}</div>
               <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 1 }}>เปิดถึง {shopCloseLabel()}</div>
             </div>
             <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>นำทาง</span>

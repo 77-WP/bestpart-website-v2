@@ -17,13 +17,13 @@ type MenuItem = {
   id: string; name_th: string; name_en: string;
   base_price: number; image_url: string | null;
   is_best_seller: boolean; category_id: string;
-  description: string | null;
+  description_th: string | null;
 };
 
 const TEST_ITEM: MenuItem = {
   id: 'test-1baht', name_th: 'ทดสอบ ฿1', name_en: 'Test Item ฿1',
   base_price: 1, image_url: null, is_best_seller: false,
-  category_id: '', description: null,
+  category_id: '', description_th: null,
 };
 
 const METHODS = [
@@ -85,6 +85,12 @@ export default function Order() {
       .order('display_order', { ascending: true })
       .then(({ data: catData, error: catErr }) => {
         if (catErr || !catData || catData.length === 0) {
+          console.error('categories query failed', {
+            message: catErr?.message,
+            code: catErr?.code,
+            details: catErr?.details,
+            hint: catErr?.hint,
+          });
           setFetchError('โหลดเมนูไม่สำเร็จ');
           setLoadingCats(false);
           return;
@@ -97,12 +103,18 @@ export default function Order() {
 
         supabase
           .from('menu_items')
-          .select('id, name_th, name_en, base_price, image_url, is_best_seller, category_id, description')
+          .select('id, name_th, name_en, base_price, image_url, is_best_seller, category_id, description_th')
           .in('category_id', cats.map(c => c.id))
           .eq('is_active', true)
           .order('display_order', { ascending: true })
           .then(({ data: itemData, error: itemErr }) => {
             if (itemErr || !itemData) {
+              console.error('menu_items query failed', {
+                message: itemErr?.message,
+                code: itemErr?.code,
+                details: itemErr?.details,
+                hint: itemErr?.hint,
+              });
               setFetchError('โหลดเมนูไม่สำเร็จ');
               setLoadingItems(false);
               return;
@@ -439,13 +451,13 @@ export default function Order() {
                         )}
                         <div style={{ fontFamily: 'var(--serif)', fontSize: 14, lineHeight: 1.25 }}>{it.name_th}</div>
                         <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 2 }}>{it.name_en}</div>
-                        {it.description && (
+                        {it.description_th && (
                           <div style={{
                             fontSize: 11, color: 'var(--ink-2)', marginTop: 5, lineHeight: 1.55,
                             display: '-webkit-box',
                             WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
                             overflow: 'hidden',
-                          }}>{it.description}</div>
+                          }}>{it.description_th}</div>
                         )}
                         <div style={{
                           display: 'flex', alignItems: 'center',

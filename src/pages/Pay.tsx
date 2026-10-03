@@ -11,12 +11,16 @@ type QrState =
   | { phase: 'error'; message: string };
 
 /* ── Countdown to expiry ─────────────────────────────────── */
-function useCountdown(expiresAt: string | null) {
-  const [secs, setSecs] = useState(0);
+// Returns null until the first tick — prevents a false "expired" on the render
+// where state just became 'ready' but the interval hasn't fired yet (countdown=0 default).
+function useCountdown(expiresAt: string | null): number | null {
+  const [secs, setSecs] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!expiresAt) return;
-
+    if (!expiresAt) {
+      setSecs(null);
+      return;
+    }
     function tick() {
       const remaining = Math.max(0, Math.floor((new Date(expiresAt!).getTime() - Date.now()) / 1000));
       setSecs(remaining);
@@ -33,12 +37,15 @@ export default function Pay() {
   const { orderId } = useParams<{ orderId: string }>();
   const navigate    = useNavigate();
   const [state, setState] = useState<QrState>({ phase: 'loading' });
-  const pollingRef      = useRef<ReturnType<typeof setInterval> | null>(null);
-  const paidRef         = useRef(false);
-  const autoFetchedRef  = useRef(false); // prevents StrictMode double-invoke on mount
+  const pollingRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const paidRef     = useRef(false);
+
+  // In-flight fetch keyed by orderId — deduplicates concurrent calls (e.g. StrictMode double-invoke).
+  // cleared in finally so manual refresh ("สร้าง QR ใหม่") always starts a fresh fetch.
+  const fetchPromiseRef = useRef<{ orderId: string; promise: Promise<void> } | null>(null);
 
   const expiresAt = state.phase === 'ready' ? state.expiresAt : null;
-  const countdown = useCountdown(expiresAt);
+  const countdown = useCountdown(expiresAt); // number | null
 
   /* Navigate to track once paid */
   const handlePaid = useCallback(() => {
@@ -51,45 +58,56 @@ export default function Pay() {
   /* Fetch / refresh QR from edge function */
   const fetchQr = useCallback(async () => {
     if (!orderId) return;
-    setState({ phase: 'loading' });
-    try {
-      const { data, error } = await supabase.functions.invoke('create-beam-charge', {
-        body: { order_id: orderId },
-      });
-      if (error || !data) {
-        const rawMsg = error?.message ?? 'ไม่สามารถสร้าง QR ได้';
-        // FunctionsHttpError carries the edge function's response body in .context
-        const context = (error as unknown as { context?: { body?: string; status?: number } })?.context;
-        const detail  = context?.body ? ` — ${context.body}` : '';
-        const status  = context?.status ? ` (HTTP ${context.status})` : '';
-        console.error('[create-beam-charge] failed:', { message: rawMsg, context });
-        setState({
-          phase:   'error',
-          message: TEST_MODE ? `[create-beam-charge] ${rawMsg}${status}${detail}` : 'ไม่สามารถสร้าง QR ได้',
-        });
-        return;
-      }
-      setState({
-        phase:       'ready',
-        qrImage:     data.qr_image,
-        expiresAt:   data.expires_at,
-        chargeId:    data.charge_id,
-        amountSatang: data.amount,
-      });
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'เกิดข้อผิดพลาด';
-      setState({ phase: 'error', message: msg });
+    // Dedup: if there's already an in-flight fetch for this orderId, await it
+    if (fetchPromiseRef.current?.orderId === orderId) {
+      return fetchPromiseRef.current.promise;
     }
+    setState({ phase: 'loading' });
+    const promise = (async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('create-beam-charge', {
+          body: { order_id: orderId },
+        });
+        if (error || !data) {
+          const rawMsg = error?.message ?? 'ไม่สามารถสร้าง QR ได้';
+          const context = (error as unknown as { context?: { body?: string; status?: number } })?.context;
+          const detail  = context?.body ? ` — ${context.body}` : '';
+          const status  = context?.status ? ` (HTTP ${context.status})` : '';
+          console.error('[create-beam-charge] failed:', { message: rawMsg, context });
+          setState({
+            phase:   'error',
+            message: TEST_MODE ? `[create-beam-charge] ${rawMsg}${status}${detail}` : 'ไม่สามารถสร้าง QR ได้',
+          });
+          return;
+        }
+        setState({
+          phase:        'ready',
+          qrImage:      data.qr_image,
+          expiresAt:    data.expires_at,
+          chargeId:     data.charge_id,
+          amountSatang: data.amount,
+        });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'เกิดข้อผิดพลาด';
+        setState({ phase: 'error', message: msg });
+      } finally {
+        // Clear ref so the next manual refresh starts a fresh fetch
+        if (fetchPromiseRef.current?.orderId === orderId) {
+          fetchPromiseRef.current = null;
+        }
+      }
+    })();
+    fetchPromiseRef.current = { orderId, promise };
+    return promise;
   }, [orderId]);
 
-  /* Initial QR load — guarded so StrictMode double-mount only fires once */
-  useEffect(() => {
-    if (autoFetchedRef.current) return;
-    autoFetchedRef.current = true;
-    fetchQr();
-  }, [fetchQr]);
+  /* Initial QR load — useEffect fires on mount; the fetchPromiseRef guard handles StrictMode
+     double-invoke: the second call sees the in-flight promise and awaits it instead of
+     issuing a second network request. */
+  useEffect(() => { fetchQr(); }, [fetchQr]);
 
-  /* Mark expired when countdown hits 0 */
+  /* Mark expired — only when countdown has been initialized (≠ null) and reached 0.
+     countdown is null on the first render after state→'ready', so this never fires prematurely. */
   useEffect(() => {
     if (state.phase === 'ready' && countdown === 0) {
       setState({ phase: 'expired' });
@@ -99,7 +117,6 @@ export default function Pay() {
   /* Realtime subscription — watch for payment_status = 'paid' */
   useEffect(() => {
     if (!orderId) return;
-
     const channel = supabase
       .channel(`pay-order-${orderId}`)
       .on(
@@ -111,14 +128,12 @@ export default function Pay() {
         }
       )
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, [orderId, handlePaid]);
 
   /* Polling fallback every 5 s */
   useEffect(() => {
     if (!orderId) return;
-
     pollingRef.current = setInterval(async () => {
       const { data } = await supabase
         .from('orders')
@@ -127,14 +142,14 @@ export default function Pay() {
         .single();
       if (data?.payment_status === 'paid') handlePaid();
     }, 5000);
-
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
     };
   }, [orderId, handlePaid]);
 
-  const mins = Math.floor(countdown / 60);
-  const secs = countdown % 60;
+  const displayMins = countdown !== null ? Math.floor(countdown / 60) : 0;
+  const displaySecs = countdown !== null ? countdown % 60 : 0;
+  const nearExpiry  = countdown !== null && countdown < 60;
 
   return (
     <div className="page" style={{ paddingBottom: 40 }}>
@@ -186,11 +201,8 @@ export default function Pay() {
 
           {/* QR image */}
           <div style={{
-            marginTop: 20,
-            padding: 12,
-            borderRadius: 'var(--r-md)',
-            border: '1.5px solid var(--line)',
-            background: '#fff',
+            marginTop: 20, padding: 12,
+            borderRadius: 'var(--r-md)', border: '1.5px solid var(--line)', background: '#fff',
           }}>
             <img
               src={`data:image/png;base64,${state.qrImage}`}
@@ -201,14 +213,14 @@ export default function Pay() {
 
           {/* Countdown */}
           <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ color: countdown < 60 ? 'var(--accent)' : 'var(--ink-3)' }}>
+            <span style={{ color: nearExpiry ? 'var(--accent)' : 'var(--ink-3)' }}>
               {I.clock(14)}
             </span>
             <span style={{
               fontFamily: 'var(--mono)', fontSize: 13,
-              color: countdown < 60 ? 'var(--accent)' : 'var(--ink-2)',
+              color: nearExpiry ? 'var(--accent)' : 'var(--ink-2)',
             }}>
-              {String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')}
+              {String(displayMins).padStart(2, '0')}:{String(displaySecs).padStart(2, '0')}
             </span>
             <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>หมดอายุใน</span>
           </div>

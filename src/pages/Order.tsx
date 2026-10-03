@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { motion, useReducedMotion } from 'motion/react';
 import { supabase } from '../lib/supabase';
 import { Bowl } from '../components/Bowl';
 import { CartBar } from '../components/CartBar';
@@ -32,45 +33,36 @@ const METHODS = [
   { id: 'curbside', label: 'เสิร์ฟถึงรถ' },
 ];
 
+const BEST_CAT_ID = '__best__';
+
 /* ══════════════════════════════════════════════════════════
-   ORDER PAGE
+   ORDER PAGE — Chagee-style layout
 ══════════════════════════════════════════════════════════ */
 export default function Order() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const prefersReduced = useReducedMotion();
 
   const method = searchParams.get('method') ?? 'dine-in';
   const itemId = searchParams.get('item');
 
-  /* Shop status — computed once per mount */
   const [shopInfo] = useState(() => computeSlots());
 
   /* ── Data ───────────────────────────────────────────── */
-  const [cats,        setCats]        = useState<Category[]>([]);
-  const [itemsByCat,  setItemsByCat]  = useState<Map<string, MenuItem[]>>(new Map());
-  const [activeCat,   setActiveCat]   = useState('');
-  const [loadingCats, setLoadingCats] = useState(true);
-  const [loadingItems,setLoadingItems]= useState(false);
-  const [fetchError,  setFetchError]  = useState<string | null>(null);
-  const [retryKey,    setRetryKey]    = useState(0);
+  const [cats,         setCats]         = useState<Category[]>([]);
+  const [itemsByCat,   setItemsByCat]   = useState<Map<string, MenuItem[]>>(new Map());
+  const [activeCat,    setActiveCat]    = useState('');
+  const [loadingCats,  setLoadingCats]  = useState(true);
+  const [loadingItems, setLoadingItems] = useState(false);
+  const [fetchError,   setFetchError]   = useState<string | null>(null);
+  const [retryKey,     setRetryKey]     = useState(0);
 
-  /* ── Scroll-spy refs ─────────────────────────────────── */
-  const headerRef    = useRef<HTMLDivElement>(null);
-  const railRef      = useRef<HTMLDivElement>(null);
-  const sectionRefs  = useRef<Map<string, HTMLDivElement>>(new Map());
-  const railBtnRefs  = useRef<Map<string, HTMLButtonElement>>(new Map());
-  const scrollLocked = useRef(false);
-  const [headerH, setHeaderH] = useState(62);
-
-  /* Measure header height reactively */
-  useEffect(() => {
-    if (!headerRef.current) return;
-    const ro = new ResizeObserver(entries => {
-      setHeaderH(entries[0].contentRect.height);
-    });
-    ro.observe(headerRef.current);
-    return () => ro.disconnect();
-  }, []);
+  /* ── Refs ────────────────────────────────────────────── */
+  const railRef        = useRef<HTMLDivElement>(null);
+  const rightScrollRef = useRef<HTMLDivElement>(null);
+  const sectionRefs    = useRef<Map<string, HTMLDivElement>>(new Map());
+  const railBtnRefs    = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const scrollLocked   = useRef(false);
 
   /* ── Fetch all categories + all items ─────────────────── */
   useEffect(() => {
@@ -86,47 +78,47 @@ export default function Order() {
       .then(({ data: catData, error: catErr }) => {
         if (catErr || !catData || catData.length === 0) {
           console.error('categories query failed', {
-            message: catErr?.message,
-            code: catErr?.code,
-            details: catErr?.details,
-            hint: catErr?.hint,
+            message: catErr?.message, code: catErr?.code,
+            details: catErr?.details, hint: catErr?.hint,
           });
           setFetchError('โหลดเมนูไม่สำเร็จ');
           setLoadingCats(false);
           return;
         }
-        const cats = catData as Category[];
-        setCats(cats);
-        setActiveCat(cats[0].id);
+        const fetchedCats = catData as Category[];
+        setCats(fetchedCats);
+        setActiveCat(fetchedCats[0].id);
         setLoadingCats(false);
         setLoadingItems(true);
 
         supabase
           .from('menu_items')
           .select('id, name_th, name_en, base_price, image_url, is_best_seller, category_id, description_th')
-          .in('category_id', cats.map(c => c.id))
+          .in('category_id', fetchedCats.map(c => c.id))
           .eq('is_active', true)
           .order('display_order', { ascending: true })
           .then(({ data: itemData, error: itemErr }) => {
             if (itemErr || !itemData) {
               console.error('menu_items query failed', {
-                message: itemErr?.message,
-                code: itemErr?.code,
-                details: itemErr?.details,
-                hint: itemErr?.hint,
+                message: itemErr?.message, code: itemErr?.code,
+                details: itemErr?.details, hint: itemErr?.hint,
               });
               setFetchError('โหลดเมนูไม่สำเร็จ');
               setLoadingItems(false);
               return;
             }
             const map = new Map<string, MenuItem[]>();
-            cats.forEach(c => map.set(c.id, []));
+            fetchedCats.forEach(c => map.set(c.id, []));
             (itemData as MenuItem[]).forEach(it => {
               map.get(it.category_id)?.push(it);
             });
+
+            /* Synthetic "best seller" category */
+            const bestItems = (itemData as MenuItem[]).filter(it => it.is_best_seller);
+            if (bestItems.length > 0) map.set(BEST_CAT_ID, bestItems);
+
             if (TEST_MODE) {
-              // Append TEST_ITEM to first category
-              const firstCat = cats[0].id;
+              const firstCat = fetchedCats[0].id;
               map.get(firstCat)?.push({ ...TEST_ITEM, category_id: firstCat });
             }
             setItemsByCat(map);
@@ -135,29 +127,39 @@ export default function Order() {
       });
   }, [retryKey]);
 
-  /* ── Scroll-spy with IntersectionObserver ─────────────── */
+  /* ── Display categories (best first) ─────────────────── */
+  const displayCats = useMemo<Category[]>(() => [
+    ...(itemsByCat.has(BEST_CAT_ID)
+      ? [{ id: BEST_CAT_ID, name_th: 'สินค้าขายดี', name_en: 'Best Sellers', display_order: -1 }]
+      : []),
+    ...cats,
+  ], [cats, itemsByCat]);
+
+  /* ── Scroll-spy: IntersectionObserver on right container ─ */
   useEffect(() => {
-    if (cats.length === 0 || loadingItems) return;
+    if (displayCats.length === 0 || loadingItems || !rightScrollRef.current) return;
+    const container = rightScrollRef.current;
+
     const observer = new IntersectionObserver(
       (entries) => {
         if (scrollLocked.current) return;
         const visible = entries.filter(e => e.isIntersecting);
         if (visible.length === 0) return;
-        // Pick entry whose top is closest to the header bottom
+        const containerTop = container.getBoundingClientRect().top;
         const top = visible.reduce((best, e) =>
-          Math.abs(e.boundingClientRect.top - headerH) < Math.abs(best.boundingClientRect.top - headerH)
-            ? e : best
+          Math.abs(e.boundingClientRect.top - containerTop) <
+          Math.abs(best.boundingClientRect.top - containerTop) ? e : best
         );
         const catId = (top.target as HTMLElement).dataset.catId;
         if (catId) setActiveCat(catId);
       },
-      { rootMargin: `-${headerH + 4}px 0px -62% 0px`, threshold: 0 },
+      { root: container, rootMargin: '-36px 0px -55% 0px', threshold: 0 },
     );
     sectionRefs.current.forEach(el => observer.observe(el));
     return () => observer.disconnect();
-  }, [cats, loadingItems, headerH]);
+  }, [displayCats, loadingItems]);
 
-  /* Auto-scroll rail when activeCat changes */
+  /* Auto-scroll rail to active category */
   useEffect(() => {
     railBtnRefs.current.get(activeCat)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [activeCat]);
@@ -167,9 +169,12 @@ export default function Order() {
     setActiveCat(catId);
     scrollLocked.current = true;
     const el = sectionRefs.current.get(catId);
-    if (el) {
-      const top = el.getBoundingClientRect().top + window.scrollY - headerH;
-      window.scrollTo({ top, behavior: 'smooth' });
+    const container = rightScrollRef.current;
+    if (el && container) {
+      const elTop    = el.getBoundingClientRect().top;
+      const cTop     = container.getBoundingClientRect().top;
+      const offset   = container.scrollTop + elTop - cTop;
+      container.scrollTo({ top: offset, behavior: 'smooth' });
     }
     setTimeout(() => { scrollLocked.current = false; }, 900);
   }
@@ -188,22 +193,26 @@ export default function Order() {
     setSearchParams(params);
   }
 
-  const catForSheet = cats.map(c => ({ id: c.id, name_en: c.name_en })); // unused by ProductSheet but kept for compat
+  const catForSheet = cats.map(c => ({ id: c.id, name_en: c.name_en }));
 
   /* ── Render ──────────────────────────────────────────── */
   return (
-    <div className="page" style={{ minHeight: '100dvh' }}>
+    <div style={{
+      height: '100dvh',
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden',
+      background: 'var(--bg)',
+      paddingTop: 'env(safe-area-inset-top, 0px)',
+    }}>
 
-      {/* ── Sticky header ───────────────────────────────── */}
-      <div
-        ref={headerRef}
-        style={{
-          position: 'sticky', top: 0, zIndex: 20,
-          background: 'var(--bg)',
-          borderBottom: '1px solid var(--line)',
-          paddingTop: 'env(safe-area-inset-top, 0px)',
-        }}
-      >
+      {/* ── Header (flex-shrink:0, never scrolls) ───────── */}
+      <div style={{
+        flexShrink: 0,
+        zIndex: 20,
+        background: 'var(--bg)',
+        borderBottom: '1px solid var(--line)',
+      }}>
         {/* Closed banner */}
         {!shopInfo.isOpen && (
           <div style={{
@@ -218,7 +227,7 @@ export default function Order() {
         )}
 
         <div style={{
-          padding: '10px 18px 10px',
+          padding: '10px 18px',
           display: 'flex', alignItems: 'center', gap: 10,
         }}>
           <button
@@ -236,8 +245,7 @@ export default function Order() {
                 display: 'inline-flex', alignItems: 'center', gap: 4,
                 fontSize: 10, fontWeight: 700, letterSpacing: '.04em',
                 padding: '2px 8px', borderRadius: 'var(--r-pill)',
-                background: shopInfo.isOpen
-                  ? 'rgba(74,93,63,0.12)' : 'rgba(43,33,24,0.08)',
+                background: shopInfo.isOpen ? 'rgba(74,93,63,0.12)' : 'rgba(43,33,24,0.08)',
                 color: shopInfo.isOpen ? 'var(--accent-2)' : 'var(--ink-3)',
               }}>
                 <span style={{
@@ -249,7 +257,7 @@ export default function Order() {
                   : `ปิด · เปิด ${shopInfo.nextOpenMsg}`}
               </span>
 
-              {/* Method chip — tap to cycle */}
+              {/* Method chip */}
               <button
                 onClick={cycleMethod}
                 style={{
@@ -266,85 +274,86 @@ export default function Order() {
               </button>
             </div>
           </div>
-
-          {/* Search button (placeholder) */}
-          <button style={{
-            background: 'var(--bg-2)', border: '1px solid var(--line)',
-            width: 36, height: 36, borderRadius: '50%',
-            display: 'grid', placeItems: 'center',
-            color: 'var(--ink-2)', flexShrink: 0,
-          }}>{I.search(16)}</button>
+          {/* search icon removed */}
         </div>
       </div>
 
-      {/* ── Error state ─────────────────────────────────── */}
+      {/* ── Error ────────────────────────────────────────── */}
       {fetchError && (
-        <div style={{ padding: '56px 24px', textAlign: 'center', color: 'var(--ink-3)' }}>
-          <div style={{ marginBottom: 14, fontSize: 14 }}>{fetchError}</div>
-          <button
-            onClick={() => setRetryKey(k => k + 1)}
-            style={{
-              background: 'var(--ink)', color: 'var(--on-accent)',
-              border: 0, padding: '13px 28px', borderRadius: 'var(--r-pill)',
-              fontSize: 13, fontWeight: 600,
-            }}
-          >ลองใหม่</button>
+        <div style={{
+          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink-3)' }}>
+            <div style={{ marginBottom: 14, fontSize: 14 }}>{fetchError}</div>
+            <button
+              onClick={() => setRetryKey(k => k + 1)}
+              style={{
+                background: 'var(--ink)', color: 'var(--on-accent)',
+                border: 0, padding: '13px 28px', borderRadius: 'var(--r-pill)',
+                fontSize: 13, fontWeight: 600,
+              }}
+            >ลองใหม่</button>
+          </div>
         </div>
       )}
 
-      {/* ── Rail + Content ──────────────────────────────── */}
+      {/* ── Rail + Right scroll (the only scroll container) ─ */}
       {!fetchError && (
         <div style={{
+          flex: 1,
           display: 'flex',
-          /* Rail background extends full page height via gradient */
-          background: `linear-gradient(to right, var(--bg-3) 84px, transparent 84px)`,
-          minHeight: `calc(100dvh - ${headerH}px)`,
+          overflow: 'hidden',
+          background: `linear-gradient(to right, var(--bg-3) 80px, transparent 80px)`,
         }}>
 
-          {/* Left category rail — sticky */}
+          {/* Left category rail */}
           <div
             ref={railRef}
             style={{
-              width: 84, flexShrink: 0,
+              width: 80, flexShrink: 0,
               background: 'var(--bg-3)',
-              position: 'sticky',
-              top: headerH,
-              height: `calc(100dvh - ${headerH}px)`,
               overflowY: 'auto',
+              overflowX: 'hidden',
               paddingTop: 8,
-              alignSelf: 'flex-start',
+              paddingBottom: 'env(safe-area-inset-bottom, 0px)',
             }}
           >
-            {/* Rail skeleton */}
+            {/* Skeleton */}
             {loadingCats && Array.from({ length: 4 }).map((_, i) => (
               <div key={i} style={{ padding: '14px 12px' }}>
                 <div style={{ height: 12, borderRadius: 3, background: 'var(--bg)', width: '72%', marginBottom: 4 }} />
-                <div style={{ height: 9, borderRadius: 3, background: 'var(--bg)', width: '55%' }} />
+                <div style={{ height: 9,  borderRadius: 3, background: 'var(--bg)', width: '55%' }} />
               </div>
             ))}
 
             {/* Category buttons */}
-            {cats.map(c => (
+            {displayCats.map(c => (
               <button
                 key={c.id}
                 ref={el => { el ? railBtnRefs.current.set(c.id, el) : railBtnRefs.current.delete(c.id); }}
                 onClick={() => handleCatClick(c.id)}
-                data-item-id={c.id}
                 style={{
-                  width: '100%', padding: '13px 0 13px 14px',
+                  width: '100%', padding: '13px 0 13px 12px',
                   position: 'relative', textAlign: 'left',
                   background: c.id === activeCat ? 'var(--bg)' : 'transparent',
                   border: 0, display: 'block',
                 }}
               >
-                {/* Active indicator — separate element for round B */}
-                {c.id === activeCat && (
-                  <span style={{
-                    position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)',
-                    width: 3, height: 20, background: 'var(--accent)',
+                {/* Active indicator — animated height for slide feel */}
+                <motion.span
+                  animate={prefersReduced
+                    ? {}
+                    : { height: c.id === activeCat ? 20 : 0, opacity: c.id === activeCat ? 1 : 0 }}
+                  initial={false}
+                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                  style={{
+                    position: 'absolute', left: 0, top: '50%', translateY: '-50%',
+                    width: 3, background: 'var(--accent)',
                     borderRadius: '0 2px 2px 0',
-                  }} />
-                )}
+                    height: c.id === activeCat ? 20 : 0,
+                    opacity: c.id === activeCat ? 1 : 0,
+                  }}
+                />
                 <div style={{
                   fontSize: c.id === activeCat ? 13 : 12,
                   fontFamily: c.id === activeCat ? 'var(--serif)' : 'var(--sans)',
@@ -352,27 +361,37 @@ export default function Order() {
                   color: c.id === activeCat ? 'var(--ink)' : 'var(--ink-2)',
                   lineHeight: 1.2,
                 }}>{c.name_th}</div>
-                <div style={{ fontSize: 9, color: 'var(--ink-3)', marginTop: 2, letterSpacing: '.03em' }}>{c.name_en}</div>
+                <div style={{ fontSize: 9, color: 'var(--ink-3)', marginTop: 2, letterSpacing: '.03em' }}>
+                  {c.name_en}
+                </div>
               </button>
             ))}
           </div>
 
-          {/* Right content — continuous scroll */}
-          <div style={{ flex: 1, minWidth: 0, paddingBottom: 'calc(160px + env(safe-area-inset-bottom, 0px))' }}>
-
-            {/* Items loading skeleton */}
+          {/* ── Right scroll container — ONLY scrollable area ── */}
+          <div
+            ref={rightScrollRef}
+            style={{
+              flex: 1, minWidth: 0,
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              paddingBottom: 'calc(160px + env(safe-area-inset-bottom, 0px))',
+            }}
+          >
+            {/* Loading skeleton */}
             {loadingItems && (
-              <div style={{ padding: '14px 14px 0' }}>
+              <div style={{ padding: '10px 10px 0' }}>
                 {Array.from({ length: 5 }).map((_, i) => (
                   <div key={i} style={{
-                    display: 'flex', gap: 12, padding: '14px 0',
-                    borderBottom: '1px solid var(--line)',
+                    display: 'flex', gap: 10, padding: 10,
+                    marginBottom: 8, borderRadius: 12,
+                    background: 'var(--bg-2)',
                   }}>
-                    <div style={{ width: 92, height: 92, borderRadius: 'var(--r-sm)', background: 'var(--bg-3)', flexShrink: 0 }} />
+                    <div style={{ width: 88, height: 88, borderRadius: 10, background: 'var(--bg-3)', flexShrink: 0 }} />
                     <div style={{ flex: 1 }}>
-                      <div style={{ height: 14, background: 'var(--bg-3)', borderRadius: 4, marginBottom: 7, width: '62%' }} />
-                      <div style={{ height: 10, background: 'var(--bg-3)', borderRadius: 4, marginBottom: 7, width: '38%' }} />
-                      <div style={{ height: 10, background: 'var(--bg-3)', borderRadius: 4, width: '78%' }} />
+                      <div style={{ height: 13, background: 'var(--bg-3)', borderRadius: 4, marginBottom: 7, width: '60%' }} />
+                      <div style={{ height: 9,  background: 'var(--bg-3)', borderRadius: 4, marginBottom: 7, width: '38%' }} />
+                      <div style={{ height: 15, background: 'var(--bg-3)', borderRadius: 4, width: '30%', marginTop: 18 }} />
                     </div>
                   </div>
                 ))}
@@ -380,112 +399,139 @@ export default function Order() {
             )}
 
             {/* Category sections */}
-            {!loadingItems && cats.map(cat => {
+            {!loadingItems && displayCats.map((cat, catIdx) => {
               const catItems = itemsByCat.get(cat.id) ?? [];
+              if (catItems.length === 0) return null;
+
               return (
                 <div key={cat.id}>
-                  {/* Section header — sentinel for IntersectionObserver + sticky */}
+                  {/* Section sentinel + minimal sticky header */}
                   <div
                     ref={el => { el ? sectionRefs.current.set(cat.id, el) : sectionRefs.current.delete(cat.id); }}
                     data-cat-id={cat.id}
                     style={{
-                      position: 'sticky', top: headerH, zIndex: 5,
-                      background: 'var(--bg-2)',
-                      padding: '8px 14px 7px',
-                      borderBottom: '1px solid var(--line)',
+                      position: 'sticky', top: 0, zIndex: 5,
+                      background: 'var(--bg)',
+                      padding: '10px 14px 6px',
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-                      <span className="h-display-th" style={{ fontSize: 17 }}>{cat.name_th}</span>
-                      <span style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '.05em' }}>
-                        {cat.name_en.toUpperCase()} · {catItems.length}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--ink-2)', marginTop: 1 }}>
-                      เสิร์ฟภายใน {SHOP.prepMinutes} นาที
-                    </div>
+                    <span style={{
+                      fontSize: 12,
+                      fontFamily: 'var(--sans)',
+                      fontWeight: 400,
+                      color: 'var(--ink-3)',
+                      lineHeight: 1.4,
+                    }}>{cat.name_th}</span>
                   </div>
 
-                  {/* Empty category */}
-                  {catItems.length === 0 && (
-                    <div style={{ padding: '24px 14px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>
-                      ยังไม่มีเมนูในหมวดนี้
-                    </div>
-                  )}
-
-                  {/* Menu rows */}
-                  {catItems.map(it => (
-                    <div
-                      key={it.id}
-                      data-item-id={it.id}
-                      onClick={() => openItem(it.id)}
-                      style={{
-                        display: 'flex', gap: 12, padding: '14px 14px',
-                        borderBottom: '1px solid var(--line)',
-                        cursor: 'pointer', alignItems: 'flex-start',
-                      }}
-                    >
-                      {/* Thumbnail — separate element tagged for round B transition */}
-                      <div
-                        data-item-img={it.id}
+                  {/* Cards — content-visibility for off-screen perf */}
+                  <div style={{
+                    padding: '2px 10px 6px',
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    contentVisibility: 'auto' as any,
+                    containIntrinsicSize: 'auto 400px',
+                  }}>
+                    {catItems.map((it, itemIdx) => (
+                      <motion.div
+                        key={it.id}
+                        initial={prefersReduced ? false : { opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{
+                          delay: Math.min((catIdx * 8 + itemIdx) * 0.035, 0.35),
+                          duration: 0.22, ease: 'easeOut',
+                        }}
+                        whileTap={prefersReduced ? undefined : { scale: 0.97 }}
+                        onClick={() => openItem(it.id)}
                         style={{
-                          width: 92, height: 92, borderRadius: 'var(--r-sm)',
-                          background: 'var(--bg-3)', flexShrink: 0,
-                          overflow: 'hidden', display: 'grid', placeItems: 'center',
+                          display: 'flex', gap: 10, padding: 10,
+                          marginBottom: 8, borderRadius: 12,
+                          background: 'var(--bg-2)',
+                          cursor: 'pointer',
+                          alignItems: 'flex-start',
                         }}
                       >
-                        {it.image_url ? (
-                          <img
-                            src={it.image_url} alt={it.name_th}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                        ) : (
-                          <Bowl tone="clay" topping="egg" size={80} />
-                        )}
-                      </div>
-
-                      {/* Text */}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        {it.is_best_seller && (
-                          <span style={{
-                            display: 'inline-block', marginBottom: 4,
-                            fontSize: 9, fontWeight: 700, letterSpacing: '.08em',
-                            padding: '2px 6px', borderRadius: 3,
-                            background: 'var(--accent)', color: '#fff',
-                          }}>BEST</span>
-                        )}
-                        <div style={{ fontFamily: 'var(--serif)', fontSize: 14, lineHeight: 1.25 }}>{it.name_th}</div>
-                        <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 2 }}>{it.name_en}</div>
-                        {it.description_th && (
-                          <div style={{
-                            fontSize: 11, color: 'var(--ink-2)', marginTop: 5, lineHeight: 1.55,
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
+                        {/* Thumbnail */}
+                        <div
+                          data-item-img={it.id}
+                          style={{
+                            width: 88, height: 88,
+                            borderRadius: 10,
+                            background: 'var(--bg-3)',
+                            flexShrink: 0,
                             overflow: 'hidden',
-                          }}>{it.description_th}</div>
-                        )}
-                        <div style={{
-                          display: 'flex', alignItems: 'center',
-                          justifyContent: 'space-between', marginTop: 8,
-                        }}>
-                          <span className="price thb" style={{ fontSize: 16, fontFamily: 'var(--mono)' }}>
-                            {it.base_price}
-                          </span>
-                          {/* "+" button — min 36px circle, greyed when closed */}
-                          <button
-                            onClick={e => { e.stopPropagation(); openItem(it.id); }}
-                            style={{
-                              width: 36, height: 36, borderRadius: '50%',
-                              background: shopInfo.isOpen ? 'var(--ink)' : 'var(--bg-3)',
-                              color: shopInfo.isOpen ? 'var(--on-accent)' : 'var(--ink-3)',
-                              border: 0, display: 'grid', placeItems: 'center',
-                              cursor: 'pointer',
-                            }}
-                          >{I.plus(16)}</button>
+                            display: 'grid', placeItems: 'center',
+                          }}
+                        >
+                          {it.image_url ? (
+                            <img
+                              src={it.image_url}
+                              alt={it.name_th}
+                              width={88}
+                              height={88}
+                              loading="lazy"
+                              decoding="async"
+                              style={{
+                                width: '100%', height: '100%', objectFit: 'cover',
+                                opacity: 0,
+                                transition: prefersReduced ? 'none' : 'opacity 0.3s ease',
+                              }}
+                              onLoad={e => {
+                                (e.currentTarget as HTMLImageElement).style.opacity = '1';
+                              }}
+                            />
+                          ) : (
+                            <Bowl tone="clay" topping="egg" size={76} />
+                          )}
                         </div>
-                      </div>
-                    </div>
-                  ))}
+
+                        {/* Text */}
+                        <div style={{
+                          flex: 1, minWidth: 0,
+                          display: 'flex', flexDirection: 'column',
+                          height: 88,
+                        }}>
+                          {it.is_best_seller && (
+                            <span style={{
+                              display: 'inline-block', marginBottom: 3, alignSelf: 'flex-start',
+                              fontSize: 8, fontWeight: 700, letterSpacing: '.06em',
+                              padding: '1px 5px', borderRadius: 3,
+                              background: 'var(--accent)', color: '#fff',
+                            }}>BEST</span>
+                          )}
+                          <div style={{
+                            fontFamily: 'var(--serif)', fontSize: 14, lineHeight: 1.25,
+                            color: 'var(--ink)',
+                          }}>{it.name_th}</div>
+                          <div style={{
+                            fontSize: 10, color: 'var(--ink-3)', marginTop: 2,
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>{it.name_en}</div>
+
+                          {/* Price + add button — pushed to bottom */}
+                          <div style={{
+                            display: 'flex', alignItems: 'center',
+                            justifyContent: 'space-between',
+                            marginTop: 'auto',
+                          }}>
+                            <span className="price thb" style={{ fontSize: 15, fontFamily: 'var(--mono)' }}>
+                              {it.base_price}
+                            </span>
+                            <motion.button
+                              whileTap={prefersReduced ? undefined : { scale: 0.90 }}
+                              onClick={e => { e.stopPropagation(); openItem(it.id); }}
+                              style={{
+                                width: 30, height: 30, borderRadius: '50%',
+                                background: shopInfo.isOpen ? 'var(--ink)' : 'var(--bg-3)',
+                                color: shopInfo.isOpen ? 'var(--on-accent)' : 'var(--ink-3)',
+                                border: 0, display: 'grid', placeItems: 'center',
+                                cursor: 'pointer', flexShrink: 0,
+                              }}
+                            >{I.plus(14)}</motion.button>
+                          </div>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
                 </div>
               );
             })}
@@ -497,7 +543,7 @@ export default function Order() {
       <CartBar />
       <TabBar active="menu" />
 
-      {/* Product sheet — URL-driven: /order?item=<id> */}
+      {/* Product sheet — URL-driven */}
       {itemId && (
         <ProductSheet
           isShopOpen={shopInfo.isOpen}

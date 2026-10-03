@@ -51,7 +51,7 @@ export default function Checkout() {
     // TEST_MODE: shop is always open; ensure at least the ASAP slot exists
     const slots = base.slots.length > 0
       ? base.slots
-      : [{ label: 'พร้อมเร็วสุด', sub: `~${SHOP.prepMinutes} นาที`, value: 'โดยเร็วที่สุด', isAsap: true as const }];
+      : [{ label: 'พร้อมเร็วสุด', sub: `~${SHOP.prepMinutes} นาที`, value: null, isAsap: true as const }];
     return { isOpen: true, slots, nextOpenMsg: '' };
   });
 
@@ -98,22 +98,30 @@ export default function Checkout() {
     const selectedSlot = shopInfo.slots[timeSlot];
     const isBeam = payment === 'promptpay';
 
+    // Sanitize: only accept "HH:MM" or "HH:MM:SS" — anything else (including text) → null
+    const rawPickup = selectedSlot?.value ?? null;
+    const pickupTime = rawPickup && /^\d{2}:\d{2}(:\d{2})?$/.test(rawPickup) ? rawPickup : null;
+
+    const insertPayload = {
+      items:                   orderItems,
+      subtotal:                subtotal,
+      discount_amount:         0,
+      delivery_fee:            0,
+      grand_total:             total,
+      status:                  isBeam ? 'awaiting_payment' : 'pending',
+      payment_status:          'pending',
+      fulfillment_type:        FULFILLMENT_MAP[method] ?? 'takeaway',
+      checkout_payment_method: isBeam ? 'promptpay' : 'cash',
+      internal_notes:          isBeam ? null : 'จ่ายที่ร้าน',
+      pickup_time:             pickupTime,
+      source:                  'web',
+    };
+
+    if (TEST_MODE) console.log('[INSERT orders] payload:', insertPayload);
+
     const { data, error: dbError } = await supabase
       .from('orders')
-      .insert({
-        items:                   orderItems,
-        subtotal:                subtotal,
-        discount_amount:         0,
-        delivery_fee:            0,
-        grand_total:             total,
-        status:                  isBeam ? 'awaiting_payment' : 'pending',
-        payment_status:          'pending',
-        fulfillment_type:        FULFILLMENT_MAP[method] ?? 'takeaway',
-        checkout_payment_method: isBeam ? 'promptpay' : 'cash',
-        internal_notes:          isBeam ? null : 'จ่ายที่ร้าน',
-        pickup_time:             selectedSlot?.value ?? null,
-        source:                  'web',
-      })
+      .insert(insertPayload)
       .select('id')
       .single();
 

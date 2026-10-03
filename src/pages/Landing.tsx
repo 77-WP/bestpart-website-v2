@@ -132,6 +132,7 @@ export default function Landing() {
     [
       { name: 'LINE Official', href: LINKS.line,     dot: '#06C755' },
       { name: 'Facebook Page', href: LINKS.facebook, dot: '#1877F2' },
+      { name: 'TikTok',        href: LINKS.tiktok,   dot: '#010101' },
     ] as { name: string; href: string | null; dot: string }[]
   ).filter((s): s is { name: string; href: string; dot: string } => s.href !== null);
 

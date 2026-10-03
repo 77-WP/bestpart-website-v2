@@ -3,7 +3,10 @@ import { useCart, cartTotal, itemTotal } from '../store/cart';
 import { Bowl } from '../components/Bowl';
 import { TabBar } from '../components/TabBar';
 import { I } from '../components/icons';
-import { SUGGESTIONS } from '../data/menu';
+import { SHOP } from '../config/shop';
+
+// NOTE (item 7): CartItem stores tone='clay' and topping='egg' hardcoded in ProductSheet/Product —
+// there is no actual product image in CartItem. The Bowl SVG placeholder is used for every cart line.
 
 export default function Cart() {
   const { items, remove, setQty, clear } = useCart();
@@ -72,7 +75,7 @@ export default function Cart() {
         <span style={{ color: 'var(--accent)' }}>{I.bag(20)}</span>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '.06em', textTransform: 'uppercase' }}>วิธีรับ</div>
-          <div style={{ fontFamily: 'var(--serif)', fontSize: 14 }}>รับกลับบ้าน · พร้อมใน 12 นาที</div>
+          <div style={{ fontFamily: 'var(--serif)', fontSize: 14 }}>รับกลับบ้าน · พร้อมใน {SHOP.prepMinutes} นาที</div>
         </div>
         <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>เปลี่ยน</span>
       </div>
@@ -116,32 +119,6 @@ export default function Cart() {
             </div>
           </div>
         ))}
-      </div>
-
-      {/* Suggestions */}
-      <div style={{ padding: '20px 18px 0' }}>
-        <div className="kicker muted">เพิ่มได้อีก · YOU MIGHT LIKE</div>
-        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', marginTop: 10, marginRight: -18, paddingRight: 18 }}>
-          {SUGGESTIONS.map(s => (
-            <div key={s.id} style={{
-              minWidth: 120, padding: 10, borderRadius: 'var(--r-sm)',
-              background: 'var(--bg-2)', border: '1px solid var(--line)', flexShrink: 0,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'center', padding: 4 }}>
-                <Bowl tone={s.tone} topping={s.topping} size={56} />
-              </div>
-              <div style={{ fontFamily: 'var(--serif)', fontSize: 12, marginTop: 4, lineHeight: 1.2 }}>{s.name}</div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-                <span className="price thb" style={{ fontSize: 13 }}>{s.price}</span>
-                <button style={{
-                  width: 24, height: 24, borderRadius: '50%', border: 0,
-                  background: 'var(--ink)', color: 'var(--on-accent)',
-                  display: 'grid', placeItems: 'center',
-                }}>{I.plus(12)}</button>
-              </div>
-            </div>
-          ))}
-        </div>
       </div>
 
       {/* Total */}

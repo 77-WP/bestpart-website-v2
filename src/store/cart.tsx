@@ -7,6 +7,7 @@ export type CartItem = {
   nameEn: string;
   tone: string;
   topping: string;
+  imageUrl?: string;    // menu_items.image_url — optional, used for Cart display
   basePrice: number;
   sizeLabel: string;
   sizePrice: number;

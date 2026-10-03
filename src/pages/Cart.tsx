@@ -90,8 +90,16 @@ export default function Cart() {
             <div style={{
               width: 64, height: 64, borderRadius: 'var(--r-sm)',
               background: 'var(--bg-2)', display: 'grid', placeItems: 'center', flexShrink: 0,
+              overflow: 'hidden',
             }}>
-              <Bowl tone={it.tone} topping={it.topping} size={56} />
+              {it.imageUrl ? (
+                <img
+                  src={it.imageUrl} alt={it.name}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              ) : (
+                <Bowl tone={it.tone} topping={it.topping} size={56} />
+              )}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: 'var(--serif)', fontSize: 14, lineHeight: 1.2 }}>{it.name}</div>

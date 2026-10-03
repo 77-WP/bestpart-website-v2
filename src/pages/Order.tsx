@@ -188,7 +188,7 @@ export default function Order() {
     setSearchParams(params);
   }
 
-  const catForSheet = cats.map(c => ({ id: c.id, name_en: c.name_en }));
+  const catForSheet = cats.map(c => ({ id: c.id, name_en: c.name_en })); // unused by ProductSheet but kept for compat
 
   /* ── Render ──────────────────────────────────────────── */
   return (
@@ -294,7 +294,12 @@ export default function Order() {
 
       {/* ── Rail + Content ──────────────────────────────── */}
       {!fetchError && (
-        <div style={{ display: 'flex' }}>
+        <div style={{
+          display: 'flex',
+          /* Rail background extends full page height via gradient */
+          background: `linear-gradient(to right, var(--bg-3) 84px, transparent 84px)`,
+          minHeight: `calc(100dvh - ${headerH}px)`,
+        }}>
 
           {/* Left category rail — sticky */}
           <div
@@ -353,7 +358,7 @@ export default function Order() {
           </div>
 
           {/* Right content — continuous scroll */}
-          <div style={{ flex: 1, minWidth: 0, paddingBottom: 170 }}>
+          <div style={{ flex: 1, minWidth: 0, paddingBottom: 'calc(160px + env(safe-area-inset-bottom, 0px))' }}>
 
             {/* Items loading skeleton */}
             {loadingItems && (
@@ -494,7 +499,11 @@ export default function Order() {
 
       {/* Product sheet — URL-driven: /order?item=<id> */}
       {itemId && (
-        <ProductSheet isShopOpen={shopInfo.isOpen} categories={catForSheet} />
+        <ProductSheet
+          isShopOpen={shopInfo.isOpen}
+          shopNextOpen={shopInfo.nextOpenMsg}
+          categories={catForSheet}
+        />
       )}
     </div>
   );

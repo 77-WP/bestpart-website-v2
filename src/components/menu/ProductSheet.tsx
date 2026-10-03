@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Bowl } from '../Bowl';
@@ -6,17 +6,25 @@ import { I } from '../icons';
 import { useCart, type CartItem } from '../../store/cart';
 import { TEST_MODE } from '../../config/env';
 
-/* ── Types ───────────────────────────────────────────────── */
+/* ── DB types ─────────────────────────────────────────────── */
 type MenuItemRow = {
-  id: string;
-  name_th: string;
-  name_en: string;
-  base_price: number;
-  image_url: string | null;
-  is_best_seller: boolean;
-  is_active: boolean;
-  category_id: string;
-  description_th: string | null;
+  id: string; name_th: string; name_en: string;
+  base_price: number; image_url: string | null;
+  is_best_seller: boolean; is_active: boolean;
+  category_id: string; description_th: string | null;
+};
+
+type DbOption = {
+  id: string; option_name_th: string; option_name_en: string;
+  price_adjustment: number; display_order: number;
+};
+
+type OptionGroup = {
+  id: string; group_name_th: string; group_name_en: string;
+  selection_type: 'SINGLE_SELECT' | 'MULTI_SELECT';
+  is_upsell_item: boolean;
+  sort_order: number;
+  options: DbOption[];
 };
 
 const TEST_ITEM_ROW: MenuItemRow = {
@@ -25,84 +33,61 @@ const TEST_ITEM_ROW: MenuItemRow = {
   is_active: true, category_id: '', description_th: null,
 };
 
-/* ── Options (hardcode — TODO: move to DB menu_item_option_groups table) ── */
-const SIZES = [
-  { label: 'ปกติ',   labelEn: 'Regular', price: 0 },
-  { label: 'พิเศษ',  labelEn: 'Large',   price: 20 },
-  { label: 'จัมโบ้', labelEn: 'Jumbo',   price: 50 },
-];
-
-const SPICE_LEVELS = [
-  { label: 'ไม่เผ็ด',  flames: 0 },
-  { label: 'เผ็ดน้อย', flames: 1 },
-  { label: 'เผ็ดกลาง', flames: 2 },
-  { label: 'เผ็ดมาก',  flames: 3 },
-  { label: 'เผ็ดสุด',  flames: 4 },
-];
-
-const ADDONS = [
-  { id: 'egg',   label: 'ไข่ดาวเพิ่ม',  labelEn: 'Extra fried egg',   price: 15 },
-  { id: 'pork',  label: 'หมูกรอบเพิ่ม', labelEn: 'Extra crispy pork', price: 30 },
-  { id: 'sauce', label: 'พริกน้ำปลา',    labelEn: 'Chili fish sauce',  price: 0 },
-];
-
-// TODO: Move option group visibility rules to DB.
-// Proposed schema: menu_item_option_groups(item_id, group_type enum('size','spice','addons'), is_visible boolean)
-// Detection method used here: category.name_en keyword match (case-insensitive).
-// Keywords checked: drink | beverage | tea | coffee | juice
-function isDrinkCategory(catNameEn: string): boolean {
-  return /drink|beverage|tea|coffee|juice/i.test(catNameEn);
-}
-
 /* ── Props ───────────────────────────────────────────────── */
 type Props = {
   isShopOpen: boolean;
-  categories: { id: string; name_en: string }[];
+  shopNextOpen: string;
+  categories?: { id: string; name_en: string }[]; // kept for compat, unused
 };
 
 /* ══════════════════════════════════════════════════════════
    PRODUCT SHEET
 ══════════════════════════════════════════════════════════ */
-export function ProductSheet({ isShopOpen, categories }: Props) {
+export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { add } = useCart();
 
   const itemId = searchParams.get('item');
 
-  const [item,         setItem]         = useState<MenuItemRow | null>(null);
-  const [phase,        setPhase]        = useState<'loading' | 'ready' | 'not_found'>('loading');
-  const [sizeIdx,      setSizeIdx]      = useState(1);
-  const [spiceIdx,     setSpiceIdx]     = useState(2);
-  const [addons,       setAddons]       = useState<Set<string>>(new Set(['sauce']));
-  const [qty,          setQty]          = useState(1);
-  const [descExpanded, setDescExpanded] = useState(false);
+  const [item,       setItem]       = useState<MenuItemRow | null>(null);
+  const [phase,      setPhase]      = useState<'loading' | 'ready' | 'not_found'>('loading');
+  const [groups,     setGroups]     = useState<OptionGroup[]>([]);
+  // selections: groupId → [optionId, ...]
+  const [selections, setSelections] = useState<Record<string, string[]>>({});
+  const [qty,        setQty]        = useState(1);
 
-  /* Category context — used to detect drink category */
-  const catNameEn = categories.find(c => c.id === item?.category_id)?.name_en ?? '';
-  const hideSpice = isDrinkCategory(catNameEn);
+  /* Close: remove ?item= but preserve ?method= */
+  const close = useCallback(() => {
+    const method = searchParams.get('method');
+    setSearchParams(method ? { method } : {});
+  }, [searchParams, setSearchParams]);
 
-  /* Body scroll lock while sheet is open */
+  /* Body scroll lock + back button support */
   useEffect(() => {
     if (!itemId) return;
-    const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prevOverflow; };
-  }, [itemId]);
+    const handler = () => close();
+    window.addEventListener('popstate', handler);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('popstate', handler);
+    };
+  }, [itemId, close]);
 
-  /* Fetch item whenever itemId changes */
+  /* Fetch item + option groups when itemId changes */
   useEffect(() => {
     if (!itemId) return;
     setPhase('loading');
     setItem(null);
+    setGroups([]);
+    setSelections({});
     setQty(1);
-    setAddons(new Set(['sauce']));
-    setSizeIdx(TEST_MODE && itemId === 'test-1baht' ? 0 : 1);
-    setSpiceIdx(2);
-    setDescExpanded(false);
 
     if (TEST_MODE && itemId === 'test-1baht') {
       setItem(TEST_ITEM_ROW);
+      setGroups([]);
+      setSelections({});
       setPhase('ready');
       return;
     }
@@ -113,49 +98,133 @@ export function ProductSheet({ isShopOpen, categories }: Props) {
       .eq('id', itemId)
       .single()
       .then(({ data, error }) => {
-        if (!data) {
-          console.error('menu_items single query failed', {
-            message: error?.message,
-            code: error?.code,
-            details: error?.details,
-            hint: error?.hint,
-          });
+        if (!data || error) {
+          console.error('menu_items single query failed', error);
           setPhase('not_found');
           return;
         }
         setItem(data as MenuItemRow);
-        setPhase('ready');
+
+        supabase
+          .from('menu_item_option_groups')
+          .select(`
+            sort_order,
+            option_group_id,
+            option_groups (
+              id, group_name_th, group_name_en, selection_type, is_upsell_item,
+              options (
+                id, option_name_th, option_name_en, price_adjustment, display_order
+              )
+            )
+          `)
+          .eq('menu_item_id', itemId)
+          .order('sort_order')
+          .then(({ data: groupData }) => {
+            const loaded: OptionGroup[] = (groupData ?? [])
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              .map((row: any) => {
+                const g = row.option_groups;
+                if (!g) return null;
+                return {
+                  ...g,
+                  sort_order: row.sort_order,
+                  options: [...(g.options ?? [])].sort(
+                    (a: DbOption, b: DbOption) =>
+                      a.display_order !== b.display_order
+                        ? a.display_order - b.display_order
+                        : a.id.localeCompare(b.id),
+                  ),
+                } as OptionGroup;
+              })
+              .filter(Boolean) as OptionGroup[];
+
+            setGroups(loaded);
+
+            const sel: Record<string, string[]> = {};
+            for (const g of loaded) {
+              if (g.selection_type === 'SINGLE_SELECT') {
+                // Default: first option by display_order (must not add price per spec)
+                const first = g.options[0];
+                sel[g.id] = first ? [first.id] : [];
+              } else {
+                sel[g.id] = [];
+              }
+            }
+            setSelections(sel);
+            setPhase('ready');
+          });
       });
   }, [itemId]);
 
-  /* Close: remove ?item= but preserve ?method= */
-  const close = useCallback(() => {
-    const method = searchParams.get('method');
-    setSearchParams(method ? { method } : {});
-  }, [searchParams, setSearchParams]);
+  /* ── Price calculation ────────────────────────────────── */
+  const unitPrice = useMemo(() => {
+    if (!item) return 0;
+    return item.base_price + groups.reduce((total, g) => {
+      const selectedIds = selections[g.id] ?? [];
+      return total + selectedIds.reduce((s, optId) => {
+        const opt = g.options.find(o => o.id === optId);
+        return s + (opt?.price_adjustment ?? 0);
+      }, 0);
+    }, 0);
+  }, [item, groups, selections]);
 
-  function toggleAddon(id: string) {
-    setAddons(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+  const total = unitPrice * qty;
+
+  /* ── Price breakdown line ─────────────────────────────── */
+  const priceBreakdown = useMemo(() => {
+    if (!item) return '';
+    const parts: string[] = [`฿${item.base_price}`];
+    for (const g of groups) {
+      const selectedIds = selections[g.id] ?? [];
+      for (const optId of selectedIds) {
+        const opt = g.options.find(o => o.id === optId);
+        if (opt && opt.price_adjustment > 0) {
+          parts.push(`${opt.option_name_th} +฿${opt.price_adjustment}`);
+        }
+      }
+    }
+    return parts.join(' · ');
+  }, [item, groups, selections]);
+
+  /* ── Toggle selection ─────────────────────────────────── */
+  function handleSelect(groupId: string, optionId: string, selType: 'SINGLE_SELECT' | 'MULTI_SELECT') {
+    setSelections(prev => {
+      const next = { ...prev };
+      if (selType === 'SINGLE_SELECT') {
+        next[groupId] = [optionId];
+      } else {
+        const cur = new Set(prev[groupId] ?? []);
+        cur.has(optionId) ? cur.delete(optionId) : cur.add(optionId);
+        next[groupId] = [...cur];
+      }
       return next;
     });
   }
 
-  const size         = SIZES[sizeIdx];
-  const spice        = SPICE_LEVELS[spiceIdx];
-  const activeAddons = ADDONS.filter(a => addons.has(a.id));
-  const addonsPrice  = activeAddons.reduce((s, a) => s + a.price, 0);
-  const unitPrice    = item ? item.base_price + size.price + addonsPrice : 0;
-  const total        = unitPrice * qty;
-
-  /* Price breakdown line e.g. "฿109 · พิเศษ +฿20 · ไข่ดาว +฿15" */
-  const priceParts: string[] = item ? [`฿${item.base_price}`] : [];
-  if (size.price > 0) priceParts.push(`${size.label} +฿${size.price}`);
-  activeAddons.filter(a => a.price > 0).forEach(a => priceParts.push(`${a.label} +฿${a.price}`));
-  const priceBreakdown = priceParts.join(' · ');
-
+  /* ── Build cart item ─────────────────────────────────── */
   function buildCartItem(): CartItem {
+    const sizeGroup  = groups.find(g => g.group_name_th.includes('ขนาด'));
+    const spiceGroup = groups.find(g => g.group_name_th.includes('เผ็ด'));
+
+    const sizeOptId = sizeGroup ? (selections[sizeGroup.id]?.[0] ?? '') : '';
+    const sizeOpt   = sizeGroup?.options.find(o => o.id === sizeOptId);
+    const sizeLabel = sizeOpt?.option_name_th ?? '';
+    const sizePrice = sizeOpt?.price_adjustment ?? 0;
+
+    const spiceOptId = spiceGroup ? (selections[spiceGroup.id]?.[0] ?? '') : '';
+    const spiceOpt   = spiceGroup?.options.find(o => o.id === spiceOptId);
+    const spice      = spiceOpt?.option_name_th ?? '';
+
+    const addons: { label: string; price: number }[] = [];
+    for (const g of groups) {
+      if (g.id === sizeGroup?.id || g.id === spiceGroup?.id) continue;
+      const selectedIds = selections[g.id] ?? [];
+      for (const optId of selectedIds) {
+        const opt = g.options.find(o => o.id === optId);
+        if (opt) addons.push({ label: opt.option_name_th, price: opt.price_adjustment });
+      }
+    }
+
     return {
       cartId:    `${item!.id}-${Date.now()}`,
       itemId:    item!.id,
@@ -163,11 +232,12 @@ export function ProductSheet({ isShopOpen, categories }: Props) {
       nameEn:    item!.name_en,
       tone:      'clay',
       topping:   'egg',
+      imageUrl:  item!.image_url ?? undefined,
       basePrice: item!.base_price,
-      sizeLabel: size.label,
-      sizePrice: size.price,
-      spice:     spice.label,
-      addons:    activeAddons.map(a => ({ label: a.label, price: a.price })),
+      sizeLabel,
+      sizePrice,
+      spice,
+      addons,
       qty,
     };
   }
@@ -188,6 +258,8 @@ export function ProductSheet({ isShopOpen, categories }: Props) {
   }
 
   if (!itemId) return null;
+
+  const isSpiceGroup = (g: OptionGroup) => g.group_name_th.includes('เผ็ด');
 
   return (
     <>
@@ -215,40 +287,58 @@ export function ProductSheet({ isShopOpen, categories }: Props) {
         boxShadow: '0 -8px 40px -8px rgba(43,33,24,0.22)',
       }}>
 
-        {/* ── Scrollable body ───────────────────────────── */}
-        <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        {/* Drag handle — fixed at top center, outside scroll */}
+        <div style={{
+          position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)',
+          width: 36, height: 4, borderRadius: 2,
+          background: 'rgba(43,33,24,0.20)',
+          zIndex: 4, pointerEvents: 'none',
+        }} />
 
-          {/* Hero 4:3 */}
+        {/* Close button — 44px white circle, always visible */}
+        <button
+          onClick={close}
+          style={{
+            position: 'absolute', top: 12, right: 12,
+            width: 44, height: 44, borderRadius: '50%',
+            background: '#fff',
+            border: 'none',
+            display: 'grid', placeItems: 'center',
+            zIndex: 5,
+            boxShadow: '0 2px 10px rgba(43,33,24,0.20)',
+          }}
+        >{I.close(18)}</button>
+
+        {/* ── Scrollable body ───────────────────────────── */}
+        <div style={{
+          flex: 1, overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch' as React.CSSProperties['WebkitOverflowScrolling'],
+        }}>
+
+          {/* Hero — 4:3 capped at 38dvh, object-fit: contain on cream bg */}
           <div style={{
             position: 'relative', width: '100%',
-            paddingTop: '75%', /* 4:3 */
-            background: 'var(--bg-3)', overflow: 'hidden', flexShrink: 0,
+            paddingTop: 'min(75%, 38dvh)',
+            background: 'var(--bg)',
+            overflow: 'hidden', flexShrink: 0,
           }}>
-            {phase === 'ready' && item?.image_url ? (
-              <img
-                src={item.image_url}
-                alt={item.name_th}
-                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-              />
-            ) : (
-              <div style={{
-                position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
-                background: 'radial-gradient(circle at center, var(--bg-3) 0%, var(--bg) 100%)',
-              }}>
-                {phase === 'ready' && <Bowl tone="clay" topping="egg" size={160} />}
-              </div>
-            )}
-
-            {/* Close button */}
-            <button
-              onClick={close}
-              style={{
-                position: 'absolute', top: 14, right: 14,
-                width: 36, height: 36, borderRadius: '50%',
-                background: 'var(--bg)', border: '1px solid var(--line)',
-                display: 'grid', placeItems: 'center', zIndex: 2,
-              }}
-            >{I.close(18)}</button>
+            <div style={{ position: 'absolute', inset: 0 }}>
+              {phase === 'ready' && item?.image_url ? (
+                <img
+                  src={item.image_url}
+                  alt={item.name_th}
+                  style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+                />
+              ) : (
+                <div style={{
+                  width: '100%', height: '100%',
+                  display: 'grid', placeItems: 'center',
+                  background: 'radial-gradient(circle at center, var(--bg-3) 0%, var(--bg) 100%)',
+                }}>
+                  {phase === 'ready' && <Bowl tone="clay" topping="egg" size={160} />}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* ── Content ─────────────────────────────────── */}
@@ -286,7 +376,6 @@ export function ProductSheet({ isShopOpen, categories }: Props) {
             {/* Active item content */}
             {phase === 'ready' && item && canOrder && (
               <>
-                {/* Badges */}
                 {item.is_best_seller && (
                   <span style={{
                     display: 'inline-block', marginBottom: 8,
@@ -301,139 +390,91 @@ export function ProductSheet({ isShopOpen, categories }: Props) {
                   {item.name_en}
                 </div>
 
-                {/* Description */}
+                {/* Description — only if non-empty */}
                 {item.description_th && (
-                  <div style={{ marginTop: 10 }}>
-                    <div style={{
-                      fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.7,
-                      ...(descExpanded ? {} : {
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical' as const,
-                        overflow: 'hidden',
-                      }),
-                    }}>
-                      {item.description_th}
-                    </div>
-                    {item.description_th.length > 70 && (
-                      <button
-                        onClick={() => setDescExpanded(e => !e)}
-                        style={{
-                          background: 'none', border: 0,
-                          color: 'var(--accent)', fontSize: 12, padding: '2px 0', marginTop: 2,
-                        }}
-                      >{descExpanded ? 'ย่อ' : 'แสดงเพิ่มเติม'}</button>
-                    )}
+                  <div style={{ marginTop: 10, fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.7 }}>
+                    {item.description_th}
                   </div>
                 )}
 
-                {/* ── Size ──────────────────────────────── */}
-                <div style={{ marginTop: 22 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                    <div className="kicker muted">ขนาด · SIZE</div>
-                    <span style={{ fontSize: 10, color: 'var(--ink-3)' }}>จำเป็น</span>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginTop: 8 }}>
-                    {SIZES.map((s, i) => (
-                      <button
-                        key={i}
-                        onClick={() => setSizeIdx(i)}
-                        style={{
-                          padding: '12px 10px', borderRadius: 'var(--r-sm)', textAlign: 'left',
-                          border: i === sizeIdx ? '1.5px solid var(--ink)' : '1px solid var(--line)',
-                          background: i === sizeIdx ? 'var(--bg-2)' : 'var(--bg)',
-                          position: 'relative',
-                        }}
-                      >
-                        {/* "แนะนำ" badge on Large (index 1) */}
-                        {i === 1 && (
-                          <span style={{
-                            position: 'absolute', top: 5, left: 5,
-                            fontSize: 8, fontWeight: 700, letterSpacing: '.05em',
-                            padding: '1px 5px', borderRadius: 2,
-                            background: 'var(--accent-2)', color: '#fff',
-                          }}>แนะนำ</span>
-                        )}
-                        <div style={{ fontFamily: 'var(--serif)', fontSize: 13, marginTop: i === 1 ? 10 : 0 }}>{s.label}</div>
-                        <div style={{ fontSize: 9, color: 'var(--ink-3)', marginTop: 1 }}>{s.labelEn}</div>
-                        <div className="thb" style={{ fontSize: 13, marginTop: 6, fontWeight: 600 }}>
-                          {s.price === 0 ? item.base_price : item.base_price + s.price}
+                {/* ── Option groups from DB ─────────────── */}
+                {groups.map(g => {
+                  const isSingle  = g.selection_type === 'SINGLE_SELECT';
+                  const isSpice   = isSpiceGroup(g);
+                  const selectedIds = selections[g.id] ?? [];
+
+                  return (
+                    <div key={g.id} style={{ marginTop: 22 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                          <span className="kicker muted">{g.group_name_th}</span>
+                          {g.group_name_en && (
+                            <span style={{ fontSize: 9, color: 'var(--ink-3)' }}>
+                              · {g.group_name_en.toLowerCase()}
+                            </span>
+                          )}
                         </div>
-                        {i === sizeIdx && (
-                          <span style={{
-                            position: 'absolute', top: 6, right: 6,
-                            width: 14, height: 14, borderRadius: '50%', background: 'var(--ink)',
-                            display: 'grid', placeItems: 'center', color: 'var(--bg)',
-                          }}>{I.check(10)}</span>
+                        {isSingle && (
+                          <span style={{ fontSize: 10, color: 'var(--ink-3)' }}>จำเป็น</span>
                         )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* ── Spice — hidden for drink categories ── */}
-                {!hideSpice && (
-                  <div style={{ marginTop: 20 }}>
-                    <div className="kicker muted">ระดับความเผ็ด · SPICE</div>
-                    <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-                      {SPICE_LEVELS.map((s, i) => (
-                        <button
-                          key={i}
-                          onClick={() => setSpiceIdx(i)}
-                          style={{
-                            padding: '8px 12px', borderRadius: 'var(--r-pill)',
-                            border: i === spiceIdx ? '1.5px solid var(--accent)' : '1px solid var(--line)',
-                            background: i === spiceIdx ? 'rgba(181,81,30,0.08)' : 'var(--bg)',
-                            color: i === spiceIdx ? 'var(--accent)' : 'var(--ink-2)',
-                            fontSize: 12, fontFamily: 'var(--serif)',
-                            display: 'inline-flex', alignItems: 'center', gap: 4,
-                          }}
-                        >
-                          {s.label}
-                          {Array.from({ length: s.flames }).map((_, j) => (
-                            <span key={j} style={{ color: 'var(--accent)' }}>{I.flame(9)}</span>
-                          ))}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* ── Add-ons ───────────────────────────── */}
-                <div style={{ marginTop: 20 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                    <div className="kicker muted">เพิ่มเติม · ADD-ONS</div>
-                    <span style={{ fontSize: 10, color: 'var(--ink-3)' }}>เลือกได้</span>
-                  </div>
-                  {ADDONS.map(a => (
-                    <div
-                      key={a.id}
-                      onClick={() => toggleAddon(a.id)}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0',
-                        borderBottom: '1px solid var(--line)', cursor: 'pointer',
-                      }}
-                    >
-                      <span style={{
-                        width: 20, height: 20, borderRadius: 6, flexShrink: 0,
-                        border: addons.has(a.id) ? '0' : '1.5px solid var(--line-2)',
-                        background: addons.has(a.id) ? 'var(--ink)' : 'transparent',
-                        color: 'var(--bg)', display: 'grid', placeItems: 'center',
-                      }}>
-                        {addons.has(a.id) && I.check(12)}
-                      </span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontFamily: 'var(--serif)', fontSize: 13 }}>{a.label}</div>
-                        <div style={{ fontSize: 10, color: 'var(--ink-3)' }}>{a.labelEn}</div>
                       </div>
-                      <span className="thb" style={{ fontSize: 13, color: a.price === 0 ? 'var(--accent-2)' : 'var(--ink)' }}>
-                        {a.price === 0 ? 'ฟรี' : `+${a.price}`}
-                      </span>
-                    </div>
-                  ))}
-                </div>
 
-                <div style={{ height: 20 }} />
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {g.options.map((opt, idx) => {
+                          const isSelected = selectedIds.includes(opt.id);
+                          const flames     = isSpice ? idx : 0;
+
+                          return (
+                            <button
+                              key={opt.id}
+                              onClick={() => handleSelect(g.id, opt.id, g.selection_type)}
+                              style={{
+                                padding: '8px 12px', borderRadius: 'var(--r-pill)',
+                                border: isSelected
+                                  ? (isSingle ? '1.5px solid var(--ink)' : '1.5px solid var(--accent)')
+                                  : '1px solid var(--line)',
+                                background: isSelected
+                                  ? (isSingle ? 'var(--bg-2)' : 'rgba(181,81,30,0.08)')
+                                  : 'var(--bg)',
+                                color: isSelected
+                                  ? (isSingle ? 'var(--ink)' : 'var(--accent)')
+                                  : 'var(--ink-2)',
+                                fontSize: 12, fontFamily: 'var(--serif)',
+                                display: 'inline-flex', alignItems: 'center', gap: 3,
+                                minHeight: 36,
+                              }}
+                            >
+                              {/* Checkbox indicator for multi-select */}
+                              {!isSingle && (
+                                <span style={{
+                                  width: 14, height: 14, borderRadius: 4, flexShrink: 0,
+                                  border: isSelected ? '0' : '1.5px solid var(--line-2)',
+                                  background: isSelected ? 'var(--accent)' : 'transparent',
+                                  color: '#fff', display: 'grid', placeItems: 'center',
+                                }}>
+                                  {isSelected && I.check(10)}
+                                </span>
+                              )}
+                              <span>{opt.option_name_th}</span>
+                              {/* Flame icons for spice groups */}
+                              {isSpice && flames > 0 && Array.from({ length: flames }).map((_, j) => (
+                                <span key={j} style={{ color: 'var(--accent)', lineHeight: 1 }}>{I.flame(8)}</span>
+                              ))}
+                              {/* Price adjustment — only if > 0 */}
+                              {opt.price_adjustment > 0 && (
+                                <span style={{ fontSize: 10, fontWeight: 600, opacity: 0.75 }}>
+                                  +฿{opt.price_adjustment}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                <div style={{ height: 24 }} />
               </>
             )}
           </div>
@@ -474,32 +515,43 @@ export function ProductSheet({ isShopOpen, categories }: Props) {
                 >{I.plus(16)}</button>
               </div>
 
-              {/* Add to cart */}
-              <button
-                onClick={handleAdd}
-                disabled={!isShopOpen}
-                style={{
-                  flex: 1, height: 44, borderRadius: 'var(--r-pill)',
-                  background: isShopOpen ? 'var(--bg-2)' : 'var(--bg-3)',
-                  border: '1.5px solid var(--line)',
-                  color: isShopOpen ? 'var(--ink)' : 'var(--ink-3)',
-                  fontSize: 13, fontWeight: 600,
-                  cursor: isShopOpen ? 'pointer' : 'not-allowed',
-                }}
-              >เพิ่มลงตะกร้า</button>
+              {isShopOpen ? (
+                <>
+                  <button
+                    onClick={handleAdd}
+                    style={{
+                      flex: 1, height: 44, borderRadius: 'var(--r-pill)',
+                      background: 'var(--bg-2)',
+                      border: '1.5px solid var(--line)',
+                      color: 'var(--ink)',
+                      fontSize: 13, fontWeight: 600,
+                    }}
+                  >เพิ่มลงตะกร้า</button>
 
-              {/* Order now */}
-              <button
-                onClick={handleOrderNow}
-                disabled={!isShopOpen}
-                style={{
-                  flex: 1, height: 44, borderRadius: 'var(--r-pill)',
-                  background: isShopOpen ? 'var(--accent)' : 'var(--ink-3)',
-                  border: 0, color: '#fff',
-                  fontSize: 13, fontWeight: 600,
-                  cursor: isShopOpen ? 'pointer' : 'not-allowed',
-                }}
-              >สั่งเลย</button>
+                  <button
+                    onClick={handleOrderNow}
+                    style={{
+                      flex: 1, height: 44, borderRadius: 'var(--r-pill)',
+                      background: 'var(--accent)',
+                      border: 0, color: '#fff',
+                      fontSize: 13, fontWeight: 600,
+                    }}
+                  >สั่งเลย</button>
+                </>
+              ) : (
+                /* Shop closed — single disabled button */
+                <button
+                  disabled
+                  style={{
+                    flex: 1, height: 44, borderRadius: 'var(--r-pill)',
+                    background: 'var(--bg-3)',
+                    border: '1px solid var(--line)',
+                    color: 'var(--ink-3)',
+                    fontSize: 13, fontWeight: 600,
+                    cursor: 'not-allowed',
+                  }}
+                >ร้านปิดอยู่ · เปิด {shopNextOpen}</button>
+              )}
             </div>
           </div>
         )}

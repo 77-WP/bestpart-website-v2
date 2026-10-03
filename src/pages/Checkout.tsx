@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useCart, cartTotal, itemTotal } from '../store/cart';
 import { supabase } from '../lib/supabase';
 import { I } from '../components/icons';
-import { SHOP, shopCloseLabel, computeSlots } from '../config/shop';
+import { SHOP, shopCloseLabel, computeSlots, type ShopInfo } from '../config/shop';
+import { TEST_MODE } from '../config/env';
 
 const METHODS = [
   { id: 'dine',     label: 'ทานที่ร้าน', labelEn: 'Dine-in' },
@@ -44,7 +45,15 @@ export default function Checkout() {
   const { items, clear } = useCart();
 
   /* compute once at mount — slots depend on current Bangkok time */
-  const [shopInfo] = useState(() => computeSlots());
+  const [shopInfo] = useState<ShopInfo>(() => {
+    const base = computeSlots();
+    if (!TEST_MODE) return base;
+    // TEST_MODE: shop is always open; ensure at least the ASAP slot exists
+    const slots = base.slots.length > 0
+      ? base.slots
+      : [{ label: 'พร้อมเร็วสุด', sub: `~${SHOP.prepMinutes} นาที`, value: 'โดยเร็วที่สุด', isAsap: true as const }];
+    return { isOpen: true, slots, nextOpenMsg: '' };
+  });
 
   const [method,    setMethod]  = useState('takeaway');
   const [timeSlot,  setTime]    = useState(0);
@@ -119,6 +128,20 @@ export default function Checkout() {
 
   return (
     <div className="page" style={{ paddingBottom: 110 }}>
+      {/* TEST MODE banner — only visible when VITE_TEST_MODE=true in .env.local */}
+      {TEST_MODE && (
+        <div style={{
+          background: '#b45309',
+          color: '#fffdf8',
+          fontSize: 10,
+          fontWeight: 700,
+          letterSpacing: '0.12em',
+          textAlign: 'center',
+          padding: '5px 0',
+        }}>
+          ⚠ TEST MODE — ห้ามใช้บัตรจริง
+        </div>
+      )}
       {/* Header */}
       <div style={{
         padding: '14px 18px 8px', display: 'flex', alignItems: 'center',

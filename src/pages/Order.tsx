@@ -5,6 +5,16 @@ import { Bowl } from '../components/Bowl';
 import { TabBar } from '../components/TabBar';
 import { CartBar } from '../components/CartBar';
 import { I } from '../components/icons';
+import { TEST_MODE } from '../config/env';
+
+const TEST_ITEM = {
+  id: 'test-1baht',
+  name_th: 'ทดสอบ ฿1',
+  name_en: 'Test Item ฿1',
+  base_price: 1,
+  image_url: null,
+  is_best_seller: false,
+};
 
 type Category = { id: string; name_th: string; name_en: string; display_order: number };
 type MenuItem  = { id: string; name_th: string; name_en: string; base_price: number; image_url: string | null; is_best_seller: boolean };
@@ -42,7 +52,8 @@ export default function Order() {
       .eq('category_id', activeCat)
       .order('display_order', { ascending: true })
       .then(({ data }) => {
-        setItems((data ?? []) as MenuItem[]);
+        const rows = (data ?? []) as MenuItem[];
+        setItems(TEST_MODE ? [...rows, TEST_ITEM] : rows);
         setLoadingItems(false);
       });
   }, [activeCat]);

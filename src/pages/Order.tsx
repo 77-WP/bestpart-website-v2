@@ -9,6 +9,7 @@ import { I } from '../components/icons';
 import { SHOP, computeSlots, shopCloseLabel } from '../config/shop';
 import { TEST_MODE } from '../config/env';
 import { ProductSheet } from '../components/menu/ProductSheet';
+import { FEATURED_KEYWORD } from '../config/featured';
 
 /* ── Types ───────────────────────────────────────────────── */
 type Category = {
@@ -35,8 +36,38 @@ const METHODS = [
 
 const BEST_CAT_ID = '__best__';
 
+/* ── Helpers ─────────────────────────────────────────────── */
+
+/** Remove emoji/symbols, keep Thai + ASCII printable */
+function stripEmoji(s: string): string {
+  return s.replace(/[^\u0020-\u007E\u0E00-\u0E7F\s]+/g, '').trim();
+}
+
+/** Split trailing parenthetical: "ชื่อ (หมายเหตุ)" → { main, note } */
+function splitParens(name: string): { main: string; note: string | null } {
+  const m = name.match(/^(.*?)\s*(\([^)]+\))\s*$/);
+  return m ? { main: m[1].trim(), note: m[2] } : { main: name, note: null };
+}
+
+/** Pick hero item for a category — keyword match → best_seller → first */
+function pickHero(catNameTh: string, items: MenuItem[]): MenuItem {
+  const keyword = FEATURED_KEYWORD[catNameTh];
+  if (keyword) {
+    const found = items.find(it => it.name_th.includes(keyword));
+    if (found) return found;
+  }
+  return items.find(it => it.is_best_seller) ?? items[0];
+}
+
+/* ── Card style tokens (no backdrop-filter anywhere) ─────── */
+const CARD_BG     = 'linear-gradient(155deg, rgba(255,255,255,0.26) 0%, rgba(255,253,248,0.68) 60%)';
+const CARD_BORDER = '1px solid rgba(255,255,255,0.56)';
+const CARD_SHADOW = '0 2px 12px -4px rgba(120,86,32,0.14), 0 8px 28px -10px rgba(120,86,32,0.10), inset 0 1px 0 rgba(255,255,255,0.60)';
+const GLOW_BG     = 'radial-gradient(circle at 50% 46%, rgba(255,215,120,0.36) 0%, rgba(251,243,227,0) 66%)';
+const DISH_SHADOW = 'radial-gradient(ellipse at 50% 0%, rgba(50,25,0,0.18) 0%, transparent 100%)';
+
 /* ══════════════════════════════════════════════════════════
-   ORDER PAGE — Chagee-style layout
+   ORDER PAGE — Chagee layout · hero+grid cards
 ══════════════════════════════════════════════════════════ */
 export default function Order() {
   const navigate = useNavigate();
@@ -45,7 +76,6 @@ export default function Order() {
 
   const method = searchParams.get('method') ?? 'dine-in';
   const itemId = searchParams.get('item');
-
   const [shopInfo] = useState(() => computeSlots());
 
   /* ── Data ───────────────────────────────────────────── */
@@ -64,7 +94,7 @@ export default function Order() {
   const railBtnRefs    = useRef<Map<string, HTMLButtonElement>>(new Map());
   const scrollLocked   = useRef(false);
 
-  /* ── Fetch all categories + all items ─────────────────── */
+  /* ── Fetch ───────────────────────────────────────────── */
   useEffect(() => {
     setLoadingCats(true);
     setFetchError(null);
@@ -87,7 +117,7 @@ export default function Order() {
         }
         const fetchedCats = catData as Category[];
         setCats(fetchedCats);
-        setActiveCat(fetchedCats[0].id);
+        setActiveCat(fetchedCats[0].id); // preliminary — may update after items load
         setLoadingCats(false);
         setLoadingItems(true);
 
@@ -113,9 +143,12 @@ export default function Order() {
               map.get(it.category_id)?.push(it);
             });
 
-            /* Synthetic "best seller" category */
+            /* Synthetic best-seller category */
             const bestItems = (itemData as MenuItem[]).filter(it => it.is_best_seller);
-            if (bestItems.length > 0) map.set(BEST_CAT_ID, bestItems);
+            if (bestItems.length > 0) {
+              map.set(BEST_CAT_ID, bestItems);
+              setActiveCat(BEST_CAT_ID); // best is now first
+            }
 
             if (TEST_MODE) {
               const firstCat = fetchedCats[0].id;
@@ -127,15 +160,36 @@ export default function Order() {
       });
   }, [retryKey]);
 
-  /* ── Display categories (best first) ─────────────────── */
-  const displayCats = useMemo<Category[]>(() => [
-    ...(itemsByCat.has(BEST_CAT_ID)
-      ? [{ id: BEST_CAT_ID, name_th: 'สินค้าขายดี', name_en: 'Best Sellers', display_order: -1 }]
-      : []),
-    ...cats,
-  ], [cats, itemsByCat]);
+  /* Log which DB categories are hidden as duplicates */
+  useEffect(() => {
+    if (cats.length === 0) return;
+    const hidden = cats.filter(c => {
+      const clean = stripEmoji(c.name_th);
+      return clean === 'สินค้าขายดี' || c.name_en.toLowerCase().includes('best');
+    });
+    if (hidden.length > 0) {
+      console.log(
+        '[Order] ซ่อนหมวดซ้ำจาก DB:',
+        hidden.map(c => `"${c.name_th}" (${c.name_en})`).join(', '),
+      );
+    }
+  }, [cats]);
 
-  /* ── Scroll-spy: IntersectionObserver on right container ─ */
+  /* ── Display categories: dedup DB best, prepend synthetic ─ */
+  const displayCats = useMemo<Category[]>(() => {
+    const filtered = cats.filter(c => {
+      const clean = stripEmoji(c.name_th);
+      return !(clean === 'สินค้าขายดี' || c.name_en.toLowerCase().includes('best'));
+    });
+    return [
+      ...(itemsByCat.has(BEST_CAT_ID)
+        ? [{ id: BEST_CAT_ID, name_th: 'สินค้าขายดี', name_en: 'Best Sellers', display_order: -1 }]
+        : []),
+      ...filtered,
+    ];
+  }, [cats, itemsByCat]);
+
+  /* ── Scroll-spy (root = right scroll container) ──────── */
   useEffect(() => {
     if (displayCats.length === 0 || loadingItems || !rightScrollRef.current) return;
     const container = rightScrollRef.current;
@@ -145,10 +199,10 @@ export default function Order() {
         if (scrollLocked.current) return;
         const visible = entries.filter(e => e.isIntersecting);
         if (visible.length === 0) return;
-        const containerTop = container.getBoundingClientRect().top;
+        const cTop = container.getBoundingClientRect().top;
         const top = visible.reduce((best, e) =>
-          Math.abs(e.boundingClientRect.top - containerTop) <
-          Math.abs(best.boundingClientRect.top - containerTop) ? e : best
+          Math.abs(e.boundingClientRect.top - cTop) <
+          Math.abs(best.boundingClientRect.top - cTop) ? e : best
         );
         const catId = (top.target as HTMLElement).dataset.catId;
         if (catId) setActiveCat(catId);
@@ -159,7 +213,7 @@ export default function Order() {
     return () => observer.disconnect();
   }, [displayCats, loadingItems]);
 
-  /* Auto-scroll rail to active category */
+  /* Auto-scroll rail to active button */
   useEffect(() => {
     railBtnRefs.current.get(activeCat)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [activeCat]);
@@ -168,12 +222,10 @@ export default function Order() {
   function handleCatClick(catId: string) {
     setActiveCat(catId);
     scrollLocked.current = true;
-    const el = sectionRefs.current.get(catId);
+    const el        = sectionRefs.current.get(catId);
     const container = rightScrollRef.current;
     if (el && container) {
-      const elTop    = el.getBoundingClientRect().top;
-      const cTop     = container.getBoundingClientRect().top;
-      const offset   = container.scrollTop + elTop - cTop;
+      const offset = container.scrollTop + el.getBoundingClientRect().top - container.getBoundingClientRect().top;
       container.scrollTo({ top: offset, behavior: 'smooth' });
     }
     setTimeout(() => { scrollLocked.current = false; }, 900);
@@ -199,21 +251,18 @@ export default function Order() {
   return (
     <div style={{
       height: '100dvh',
-      display: 'flex',
-      flexDirection: 'column',
+      display: 'flex', flexDirection: 'column',
       overflow: 'hidden',
       background: 'var(--bg)',
       paddingTop: 'env(safe-area-inset-top, 0px)',
     }}>
 
-      {/* ── Header (flex-shrink:0, never scrolls) ───────── */}
+      {/* ── Header ──────────────────────────────────────── */}
       <div style={{
-        flexShrink: 0,
-        zIndex: 20,
+        flexShrink: 0, zIndex: 20,
         background: 'var(--bg)',
         borderBottom: '1px solid var(--line)',
       }}>
-        {/* Closed banner */}
         {!shopInfo.isOpen && (
           <div style={{
             padding: '7px 18px',
@@ -225,11 +274,7 @@ export default function Order() {
             <span>· เปิด {shopInfo.nextOpenMsg} · ดูเมนูได้</span>
           </div>
         )}
-
-        <div style={{
-          padding: '10px 18px',
-          display: 'flex', alignItems: 'center', gap: 10,
-        }}>
+        <div style={{ padding: '10px 18px', display: 'flex', alignItems: 'center', gap: 10 }}>
           <button
             onClick={() => navigate('/')}
             style={{ background: 'none', border: 0, padding: 0, color: 'var(--ink)', flexShrink: 0 }}
@@ -240,7 +285,6 @@ export default function Order() {
               {SHOP.branchName}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-              {/* Open/close status chip */}
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: 4,
                 fontSize: 10, fontWeight: 700, letterSpacing: '.04em',
@@ -248,16 +292,9 @@ export default function Order() {
                 background: shopInfo.isOpen ? 'rgba(74,93,63,0.12)' : 'rgba(43,33,24,0.08)',
                 color: shopInfo.isOpen ? 'var(--accent-2)' : 'var(--ink-3)',
               }}>
-                <span style={{
-                  width: 6, height: 6, borderRadius: '50%',
-                  background: shopInfo.isOpen ? 'var(--accent-2)' : 'var(--ink-3)',
-                }} />
-                {shopInfo.isOpen
-                  ? `เปิด · ถึง ${shopCloseLabel()}`
-                  : `ปิด · เปิด ${shopInfo.nextOpenMsg}`}
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: shopInfo.isOpen ? 'var(--accent-2)' : 'var(--ink-3)' }} />
+                {shopInfo.isOpen ? `เปิด · ถึง ${shopCloseLabel()}` : `ปิด · เปิด ${shopInfo.nextOpenMsg}`}
               </span>
-
-              {/* Method chip */}
               <button
                 onClick={cycleMethod}
                 style={{
@@ -274,15 +311,12 @@ export default function Order() {
               </button>
             </div>
           </div>
-          {/* search icon removed */}
         </div>
       </div>
 
       {/* ── Error ────────────────────────────────────────── */}
       {fetchError && (
-        <div style={{
-          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink-3)' }}>
             <div style={{ marginBottom: 14, fontSize: 14 }}>{fetchError}</div>
             <button
@@ -297,28 +331,24 @@ export default function Order() {
         </div>
       )}
 
-      {/* ── Rail + Right scroll (the only scroll container) ─ */}
+      {/* ── Rail + Right scroll ──────────────────────────── */}
       {!fetchError && (
         <div style={{
-          flex: 1,
-          display: 'flex',
-          overflow: 'hidden',
+          flex: 1, display: 'flex', overflow: 'hidden',
           background: `linear-gradient(to right, var(--bg-3) 80px, transparent 80px)`,
         }}>
 
-          {/* Left category rail */}
+          {/* Left rail */}
           <div
             ref={railRef}
             style={{
               width: 80, flexShrink: 0,
               background: 'var(--bg-3)',
-              overflowY: 'auto',
-              overflowX: 'hidden',
+              overflowY: 'auto', overflowX: 'hidden',
               paddingTop: 8,
               paddingBottom: 'env(safe-area-inset-bottom, 0px)',
             }}
           >
-            {/* Skeleton */}
             {loadingCats && Array.from({ length: 4 }).map((_, i) => (
               <div key={i} style={{ padding: '14px 12px' }}>
                 <div style={{ height: 12, borderRadius: 3, background: 'var(--bg)', width: '72%', marginBottom: 4 }} />
@@ -326,7 +356,6 @@ export default function Order() {
               </div>
             ))}
 
-            {/* Category buttons */}
             {displayCats.map(c => (
               <button
                 key={c.id}
@@ -339,7 +368,7 @@ export default function Order() {
                   border: 0, display: 'block',
                 }}
               >
-                {/* Active indicator — animated height for slide feel */}
+                {/* Animated indicator bar */}
                 <motion.span
                   animate={prefersReduced
                     ? {}
@@ -360,7 +389,7 @@ export default function Order() {
                   fontWeight: c.id === activeCat ? 500 : 600,
                   color: c.id === activeCat ? 'var(--ink)' : 'var(--ink-2)',
                   lineHeight: 1.2,
-                }}>{c.name_th}</div>
+                }}>{stripEmoji(c.name_th)}</div>
                 <div style={{ fontSize: 9, color: 'var(--ink-3)', marginTop: 2, letterSpacing: '.03em' }}>
                   {c.name_en}
                 </div>
@@ -373,28 +402,41 @@ export default function Order() {
             ref={rightScrollRef}
             style={{
               flex: 1, minWidth: 0,
-              overflowY: 'auto',
-              overflowX: 'hidden',
+              overflowY: 'auto', overflowX: 'hidden',
               paddingBottom: 'calc(160px + env(safe-area-inset-bottom, 0px))',
             }}
           >
             {/* Loading skeleton */}
             {loadingItems && (
               <div style={{ padding: '10px 10px 0' }}>
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} style={{
-                    display: 'flex', gap: 10, padding: 10,
-                    marginBottom: 8, borderRadius: 12,
-                    background: 'var(--bg-2)',
-                  }}>
-                    <div style={{ width: 88, height: 88, borderRadius: 10, background: 'var(--bg-3)', flexShrink: 0 }} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ height: 13, background: 'var(--bg-3)', borderRadius: 4, marginBottom: 7, width: '60%' }} />
-                      <div style={{ height: 9,  background: 'var(--bg-3)', borderRadius: 4, marginBottom: 7, width: '38%' }} />
-                      <div style={{ height: 15, background: 'var(--bg-3)', borderRadius: 4, width: '30%', marginTop: 18 }} />
-                    </div>
+                {/* Hero skeleton */}
+                <div style={{
+                  display: 'flex', gap: 0, marginBottom: 8,
+                  borderRadius: 18, background: 'rgba(241,227,196,0.55)',
+                  border: CARD_BORDER, height: 140, overflow: 'hidden',
+                }}>
+                  <div style={{ width: 136, background: 'var(--bg-3)' }} />
+                  <div style={{ flex: 1, padding: 14 }}>
+                    <div style={{ height: 10, background: 'var(--bg-3)', borderRadius: 4, width: '40%', marginBottom: 10 }} />
+                    <div style={{ height: 16, background: 'var(--bg-3)', borderRadius: 4, width: '70%', marginBottom: 6 }} />
+                    <div style={{ height: 10, background: 'var(--bg-3)', borderRadius: 4, width: '55%' }} />
                   </div>
-                ))}
+                </div>
+                {/* Grid skeleton */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} style={{
+                      borderRadius: 16, background: 'rgba(241,227,196,0.55)',
+                      border: CARD_BORDER, overflow: 'hidden',
+                    }}>
+                      <div style={{ aspectRatio: '1', background: 'var(--bg-3)' }} />
+                      <div style={{ padding: '8px 10px 10px' }}>
+                        <div style={{ height: 12, background: 'var(--bg-3)', borderRadius: 4, width: '80%', marginBottom: 6 }} />
+                        <div style={{ height: 12, background: 'var(--bg-3)', borderRadius: 4, width: '55%' }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -403,9 +445,16 @@ export default function Order() {
               const catItems = itemsByCat.get(cat.id) ?? [];
               if (catItems.length === 0) return null;
 
+              const catDelay  = Math.min(catIdx * 0.06, 0.20);
+              const hasHero   = catItems.length >= 3;
+              const heroItem  = hasHero ? pickHero(cat.name_th, catItems) : null;
+              const gridItems = hasHero ? catItems.filter(it => it.id !== heroItem!.id) : catItems;
+              const heroMain  = heroItem ? splitParens(heroItem.name_th).main : '';
+              const heroNote  = heroItem ? splitParens(heroItem.name_th).note : null;
+
               return (
                 <div key={cat.id}>
-                  {/* Section sentinel + minimal sticky header */}
+                  {/* ── Sentinel + sticky section label ─────── */}
                   <div
                     ref={el => { el ? sectionRefs.current.set(cat.id, el) : sectionRefs.current.delete(cat.id); }}
                     data-cat-id={cat.id}
@@ -416,121 +465,242 @@ export default function Order() {
                     }}
                   >
                     <span style={{
-                      fontSize: 12,
-                      fontFamily: 'var(--sans)',
-                      fontWeight: 400,
-                      color: 'var(--ink-3)',
-                      lineHeight: 1.4,
-                    }}>{cat.name_th}</span>
+                      fontSize: 12, fontFamily: 'var(--sans)',
+                      fontWeight: 400, color: 'var(--ink-3)', lineHeight: 1.4,
+                    }}>{stripEmoji(cat.name_th)}</span>
                   </div>
 
-                  {/* Cards — content-visibility for off-screen perf */}
+                  {/* ── Cards (content-visibility for off-screen perf) ── */}
                   <div style={{
-                    padding: '2px 10px 6px',
+                    padding: '4px 10px 10px',
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     contentVisibility: 'auto' as any,
-                    containIntrinsicSize: 'auto 400px',
+                    containIntrinsicSize: 'auto 500px',
                   }}>
-                    {catItems.map((it, itemIdx) => (
+
+                    {/* ── Hero card ───────────────────────── */}
+                    {heroItem && (
                       <motion.div
-                        key={it.id}
-                        initial={prefersReduced ? false : { opacity: 0, y: 10 }}
+                        initial={prefersReduced ? false : { opacity: 0, y: 14 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{
-                          delay: Math.min((catIdx * 8 + itemIdx) * 0.035, 0.35),
-                          duration: 0.22, ease: 'easeOut',
-                        }}
-                        whileTap={prefersReduced ? undefined : { scale: 0.97 }}
-                        onClick={() => openItem(it.id)}
+                        transition={{ delay: catDelay, duration: 0.24, ease: 'easeOut' }}
+                        whileTap={prefersReduced ? undefined : { scale: 0.98 }}
+                        onClick={() => openItem(heroItem.id)}
                         style={{
-                          display: 'flex', gap: 10, padding: 10,
-                          marginBottom: 8, borderRadius: 12,
-                          background: 'var(--bg-2)',
+                          marginBottom: 8,
+                          borderRadius: 18,
+                          background: CARD_BG,
+                          border: CARD_BORDER,
+                          boxShadow: CARD_SHADOW,
+                          display: 'flex', alignItems: 'stretch',
+                          minHeight: 140,
+                          overflow: 'hidden',
                           cursor: 'pointer',
-                          alignItems: 'flex-start',
                         }}
                       >
-                        {/* Thumbnail */}
-                        <div
-                          data-item-img={it.id}
-                          style={{
-                            width: 88, height: 88,
-                            borderRadius: 10,
-                            background: 'var(--bg-3)',
-                            flexShrink: 0,
-                            overflow: 'hidden',
-                            display: 'grid', placeItems: 'center',
-                          }}
-                        >
-                          {it.image_url ? (
+                        {/* Left: image on warm glow */}
+                        <div style={{
+                          width: 136, flexShrink: 0,
+                          position: 'relative',
+                          background: GLOW_BG,
+                        }}>
+                          {heroItem.image_url ? (
                             <img
-                              src={it.image_url}
-                              alt={it.name_th}
-                              width={88}
-                              height={88}
-                              loading="lazy"
+                              src={heroItem.image_url}
+                              alt={heroItem.name_th}
+                              width={136}
+                              height={154}
+                              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                              {...{ fetchPriority: 'high' } as any}
+                              loading="eager"
                               decoding="async"
                               style={{
-                                width: '100%', height: '100%', objectFit: 'cover',
+                                width: '100%', height: '110%',
+                                objectFit: 'contain',
+                                marginTop: '-5%',
                                 opacity: 0,
-                                transition: prefersReduced ? 'none' : 'opacity 0.3s ease',
+                                transition: prefersReduced ? 'none' : 'opacity 0.28s ease',
                               }}
-                              onLoad={e => {
-                                (e.currentTarget as HTMLImageElement).style.opacity = '1';
-                              }}
+                              onLoad={e => { (e.currentTarget as HTMLImageElement).style.opacity = '1'; }}
                             />
                           ) : (
-                            <Bowl tone="clay" topping="egg" size={76} />
+                            <div style={{ display: 'grid', placeItems: 'center', height: '100%' }}>
+                              <Bowl tone="clay" topping="egg" size={110} />
+                            </div>
                           )}
+                          {/* Soft shadow under dish */}
+                          <div style={{
+                            position: 'absolute', bottom: 10, left: '18%', right: '18%', height: 10,
+                            background: DISH_SHADOW,
+                            pointerEvents: 'none',
+                          }} />
                         </div>
 
-                        {/* Text */}
+                        {/* Right: text content */}
                         <div style={{
                           flex: 1, minWidth: 0,
+                          padding: '14px 12px 12px 10px',
                           display: 'flex', flexDirection: 'column',
-                          height: 88,
                         }}>
-                          {it.is_best_seller && (
-                            <span style={{
-                              display: 'inline-block', marginBottom: 3, alignSelf: 'flex-start',
-                              fontSize: 8, fontWeight: 700, letterSpacing: '.06em',
-                              padding: '1px 5px', borderRadius: 3,
-                              background: 'var(--accent)', color: '#fff',
-                            }}>BEST</span>
+                          {/* แนะนำ badge */}
+                          <span style={{
+                            alignSelf: 'flex-start', marginBottom: 6,
+                            fontSize: 9, fontWeight: 700, letterSpacing: '.04em',
+                            padding: '2px 8px', borderRadius: 'var(--r-pill)',
+                            background: 'rgba(184,134,46,0.14)',
+                            color: 'var(--gold)',
+                          }}>แนะนำ</span>
+
+                          <div style={{
+                            fontFamily: 'var(--serif)', fontSize: 17, fontWeight: 500,
+                            lineHeight: 1.22, color: 'var(--ink)',
+                          }}>{heroMain}</div>
+                          {heroNote && (
+                            <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>{heroNote}</div>
                           )}
                           <div style={{
-                            fontFamily: 'var(--serif)', fontSize: 14, lineHeight: 1.25,
-                            color: 'var(--ink)',
-                          }}>{it.name_th}</div>
-                          <div style={{
-                            fontSize: 10, color: 'var(--ink-3)', marginTop: 2,
+                            fontSize: 10, color: 'var(--ink-3)', marginTop: 3,
                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                          }}>{it.name_en}</div>
+                          }}>{heroItem.name_en}</div>
 
-                          {/* Price + add button — pushed to bottom */}
+                          {/* Price + add button */}
                           <div style={{
                             display: 'flex', alignItems: 'center',
-                            justifyContent: 'space-between',
-                            marginTop: 'auto',
+                            justifyContent: 'space-between', marginTop: 'auto',
                           }}>
-                            <span className="price thb" style={{ fontSize: 15, fontFamily: 'var(--mono)' }}>
-                              {it.base_price}
+                            <span className="price thb" style={{ fontSize: 18, fontFamily: 'var(--mono)', fontWeight: 600, color: 'var(--ink)' }}>
+                              {heroItem.base_price}
                             </span>
                             <motion.button
-                              whileTap={prefersReduced ? undefined : { scale: 0.90 }}
-                              onClick={e => { e.stopPropagation(); openItem(it.id); }}
+                              whileTap={prefersReduced ? undefined : { scale: 0.88 }}
+                              onClick={e => { e.stopPropagation(); openItem(heroItem.id); }}
                               style={{
-                                width: 30, height: 30, borderRadius: '50%',
+                                width: 32, height: 32, borderRadius: '50%',
                                 background: shopInfo.isOpen ? 'var(--ink)' : 'var(--bg-3)',
                                 color: shopInfo.isOpen ? 'var(--on-accent)' : 'var(--ink-3)',
                                 border: 0, display: 'grid', placeItems: 'center',
                                 cursor: 'pointer', flexShrink: 0,
                               }}
-                            >{I.plus(14)}</motion.button>
+                            >{I.plus(15)}</motion.button>
                           </div>
                         </div>
                       </motion.div>
-                    ))}
+                    )}
+
+                    {/* ── Grid 2-column ───────────────────── */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      {gridItems.map((it, gridIdx) => {
+                        const { main, note } = splitParens(it.name_th);
+                        const delay = Math.min(catDelay + (hasHero ? 0.08 : 0) + Math.floor(gridIdx / 2) * 0.06, 0.42);
+
+                        return (
+                          <motion.div
+                            key={it.id}
+                            initial={prefersReduced ? false : { opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay, duration: 0.22, ease: 'easeOut' }}
+                            whileTap={prefersReduced ? undefined : { scale: 0.96 }}
+                            onClick={() => openItem(it.id)}
+                            style={{
+                              borderRadius: 16,
+                              background: CARD_BG,
+                              border: CARD_BORDER,
+                              boxShadow: CARD_SHADOW,
+                              display: 'flex', flexDirection: 'column',
+                              overflow: 'hidden',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {/* Image on glow */}
+                            <div style={{
+                              position: 'relative',
+                              width: '100%', aspectRatio: '1',
+                              background: GLOW_BG,
+                            }}>
+                              {it.is_best_seller && (
+                                <span style={{
+                                  position: 'absolute', top: 6, left: 6, zIndex: 2,
+                                  fontSize: 8, fontWeight: 700, letterSpacing: '.05em',
+                                  padding: '1px 5px', borderRadius: 3,
+                                  background: 'var(--accent)', color: '#fff',
+                                }}>BEST</span>
+                              )}
+                              {it.image_url ? (
+                                <img
+                                  src={it.image_url}
+                                  alt={it.name_th}
+                                  width={160}
+                                  height={160}
+                                  loading="lazy"
+                                  decoding="async"
+                                  style={{
+                                    width: '86%', height: '86%',
+                                    objectFit: 'contain',
+                                    margin: '7%',
+                                    display: 'block',
+                                    opacity: 0,
+                                    transition: prefersReduced ? 'none' : 'opacity 0.3s ease',
+                                  }}
+                                  onLoad={e => { (e.currentTarget as HTMLImageElement).style.opacity = '1'; }}
+                                />
+                              ) : (
+                                <div style={{ display: 'grid', placeItems: 'center', height: '100%' }}>
+                                  <Bowl tone="clay" topping="egg" size={80} />
+                                </div>
+                              )}
+                              {/* Shadow under dish */}
+                              <div style={{
+                                position: 'absolute', bottom: 6, left: '20%', right: '20%', height: 8,
+                                background: DISH_SHADOW,
+                                pointerEvents: 'none',
+                              }} />
+                            </div>
+
+                            {/* Text content */}
+                            <div style={{
+                              padding: '8px 9px 10px',
+                              flex: 1, display: 'flex', flexDirection: 'column',
+                            }}>
+                              <div style={{
+                                fontFamily: 'var(--serif)', fontSize: 12.5, lineHeight: 1.3,
+                                color: 'var(--ink)',
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical' as const,
+                                overflow: 'hidden',
+                              }}>{main}</div>
+                              {note && (
+                                <div style={{
+                                  fontSize: 10, color: 'var(--ink-3)', marginTop: 2,
+                                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                }}>{note}</div>
+                              )}
+
+                              <div style={{
+                                display: 'flex', alignItems: 'center',
+                                justifyContent: 'space-between', marginTop: 'auto', paddingTop: 8,
+                              }}>
+                                <span className="price thb" style={{ fontSize: 14, fontFamily: 'var(--mono)' }}>
+                                  {it.base_price}
+                                </span>
+                                <motion.button
+                                  whileTap={prefersReduced ? undefined : { scale: 0.88 }}
+                                  onClick={e => { e.stopPropagation(); openItem(it.id); }}
+                                  style={{
+                                    width: 28, height: 28, borderRadius: '50%',
+                                    background: shopInfo.isOpen ? 'var(--ink)' : 'var(--bg-3)',
+                                    color: shopInfo.isOpen ? 'var(--on-accent)' : 'var(--ink-3)',
+                                    border: 0, display: 'grid', placeItems: 'center',
+                                    cursor: 'pointer', flexShrink: 0,
+                                  }}
+                                >{I.plus(13)}</motion.button>
+                              </div>
+                            </div>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+
                   </div>
                 </div>
               );
@@ -539,11 +709,9 @@ export default function Order() {
         </div>
       )}
 
-      {/* Cart bar + tab bar */}
       <CartBar />
       <TabBar active="menu" />
 
-      {/* Product sheet — URL-driven */}
       {itemId && (
         <ProductSheet
           isShopOpen={shopInfo.isOpen}

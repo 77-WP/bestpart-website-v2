@@ -147,6 +147,36 @@ export default function Pay() {
     };
   }, [orderId, handlePaid]);
 
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'hint'>('idle');
+
+  const handleSaveQr = useCallback(async () => {
+    if (state.phase !== 'ready') return;
+    setSaveStatus('saving');
+    try {
+      const res  = await fetch(`data:image/png;base64,${state.qrImage}`);
+      const blob = await res.blob();
+      const file = new File([blob], 'promptpay-qr.png', { type: 'image/png' });
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'PromptPay QR' });
+        setSaveStatus('saved');
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a   = document.createElement('a');
+        a.href     = url;
+        a.download = 'promptpay-qr.png';
+        a.click();
+        URL.revokeObjectURL(url);
+        setSaveStatus('saved');
+      }
+    } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') {
+        setSaveStatus('idle');
+      } else {
+        setSaveStatus('hint');
+      }
+    }
+  }, [state]);
+
   const displayMins = countdown !== null ? Math.floor(countdown / 60) : 0;
   const displaySecs = countdown !== null ? countdown % 60 : 0;
   const nearExpiry  = countdown !== null && countdown < 60;
@@ -211,6 +241,33 @@ export default function Pay() {
             />
           </div>
 
+          {/* Save QR button */}
+          <button
+            onClick={handleSaveQr}
+            disabled={saveStatus === 'saving'}
+            style={{
+              marginTop: 12,
+              background: saveStatus === 'saved' ? 'rgba(74,93,63,0.10)' : 'var(--bg-2)',
+              border: '1px solid var(--line)',
+              color: saveStatus === 'saved' ? 'var(--accent-2)' : 'var(--ink)',
+              padding: '10px 24px',
+              borderRadius: 'var(--r-pill)',
+              fontSize: 13, fontWeight: 600,
+              display: 'flex', alignItems: 'center', gap: 8,
+              cursor: saveStatus === 'saving' ? 'default' : 'pointer',
+            }}
+          >
+            {saveStatus === 'saved' ? I.check(15) : I.share(15)}
+            {saveStatus === 'saving' ? 'กำลังบันทึก…' : saveStatus === 'saved' ? 'บันทึกแล้ว' : 'บันทึก QR'}
+          </button>
+
+          {/* Hint — shown when share/download fails */}
+          {saveStatus === 'hint' && (
+            <div style={{ marginTop: 8, fontSize: 12, color: 'var(--ink-3)', textAlign: 'center' }}>
+              กดค้างที่รูป QR เพื่อบันทึก
+            </div>
+          )}
+
           {/* Countdown */}
           <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ color: nearExpiry ? 'var(--accent)' : 'var(--ink-3)' }}>
@@ -225,20 +282,23 @@ export default function Pay() {
             <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>หมดอายุใน</span>
           </div>
 
-          {/* Instructions */}
+          {/* Instructions — 2 methods */}
           <div style={{
             marginTop: 20, width: '100%',
             padding: '14px 16px', borderRadius: 'var(--r-md)',
             background: 'var(--bg-2)', border: '1px solid var(--line)',
           }}>
-            <div className="kicker muted" style={{ marginBottom: 8 }}>วิธีชำระเงิน</div>
+            <div className="kicker muted" style={{ marginBottom: 10 }}>วิธีชำระเงิน</div>
+
+            {/* Method 1: Scan */}
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.05em', color: 'var(--ink-3)', marginBottom: 7 }}>
+              วิธีที่ 1 — สแกน QR
+            </div>
             {[
-              'เปิดแอปธนาคาร หรือแอปที่รองรับ PromptPay',
-              'เลือก "สแกน QR" หรือ "จ่ายด้วย QR"',
+              'เปิดแอปธนาคาร เลือก "สแกน QR" หรือ "จ่ายด้วย QR"',
               'สแกน QR ด้านบน และยืนยันการชำระ',
-              'หน้านี้จะอัปเดตอัตโนมัติเมื่อรับชำระแล้ว',
             ].map((step, i) => (
-              <div key={i} style={{ display: 'flex', gap: 10, marginBottom: i < 3 ? 8 : 0 }}>
+              <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
                 <span style={{
                   width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
                   background: 'var(--ink)', color: '#fff',
@@ -248,6 +308,29 @@ export default function Pay() {
                 <span style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5 }}>{step}</span>
               </div>
             ))}
+
+            {/* Method 2: Save & upload */}
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.05em', color: 'var(--ink-3)', margin: '4px 0 7px' }}>
+              วิธีที่ 2 — บันทึก QR แล้วอัปโหลด
+            </div>
+            {[
+              'กด "บันทึก QR" ด้านบน',
+              'เปิดแอปธนาคาร เลือก "อัปโหลด QR" หรือ "จ่ายด้วย QR รูปภาพ"',
+            ].map((step, i) => (
+              <div key={i} style={{ display: 'flex', gap: 10, marginBottom: i < 1 ? 8 : 0 }}>
+                <span style={{
+                  width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                  background: 'var(--bg-3)', color: 'var(--ink-2)',
+                  display: 'grid', placeItems: 'center',
+                  fontSize: 9, fontWeight: 700,
+                }}>{i + 1}</span>
+                <span style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5 }}>{step}</span>
+              </div>
+            ))}
+
+            <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--line)', fontSize: 11, color: 'var(--ink-3)' }}>
+              หน้านี้จะอัปเดตอัตโนมัติเมื่อรับชำระแล้ว
+            </div>
           </div>
 
           {/* Waiting indicator */}

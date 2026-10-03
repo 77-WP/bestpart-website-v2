@@ -120,6 +120,21 @@ export default function Landing() {
   // hero: null = probing, true = visible, false = hidden
   const [heroVisible, setHeroVisible] = useState<boolean | null>(null);
 
+  const deliveryLinks = (
+    [
+      { name: 'Grab Food',   href: LINKS.grab,       dot: '#00B14F' },
+      { name: 'LINE MAN',    href: LINKS.lineman,    dot: '#06C755' },
+      { name: 'Shopee Food', href: LINKS.shopeeFood, dot: '#EE4D2D' },
+    ] as { name: string; href: string | null; dot: string }[]
+  ).filter((p): p is { name: string; href: string; dot: string } => p.href !== null);
+
+  const socialLinks = (
+    [
+      { name: 'LINE Official', href: LINKS.line,     dot: '#06C755' },
+      { name: 'Facebook Page', href: LINKS.facebook, dot: '#1877F2' },
+    ] as { name: string; href: string | null; dot: string }[]
+  ).filter((s): s is { name: string; href: string; dot: string } => s.href !== null);
+
   return (
     <div className="page" style={{ paddingBottom: 100 }}>
 
@@ -186,12 +201,14 @@ export default function Landing() {
             sublabel="Curbside"
             onClick={() => navigate('/order?method=curbside')}
           />
-          <ServiceBtn
-            icon={I.scooter(26)}
-            label="เดลิเวอรี่"
-            sublabel="Delivery"
-            onClick={() => setSheet('delivery')}
-          />
+          {deliveryLinks.length > 0 && (
+            <ServiceBtn
+              icon={I.scooter(26)}
+              label="เดลิเวอรี่"
+              sublabel="Delivery"
+              onClick={() => setSheet('delivery')}
+            />
+          )}
         </div>
       </div>
 
@@ -223,9 +240,15 @@ export default function Landing() {
         display: 'flex',
       }}>
         <InfoBtn icon={I.info(20)} label="เกี่ยวกับเรา" onClick={() => setSheet('about')} />
-        <InfoBtn icon={I.pin(20)}  label="สาขา"         onClick={() => window.open(LINKS.googleMaps, '_blank')} />
-        <InfoBtn icon={I.share(20)} label="Social"      onClick={() => setSheet('social')} />
-        <InfoBtn icon={I.star(20)} label="รีวิว"        onClick={() => window.open(LINKS.googleReview, '_blank')} />
+        {LINKS.googleMaps && (
+          <InfoBtn icon={I.pin(20)} label="สาขา" onClick={() => window.open(LINKS.googleMaps!, '_blank')} />
+        )}
+        {socialLinks.length > 0 && (
+          <InfoBtn icon={I.share(20)} label="Social" onClick={() => setSheet('social')} />
+        )}
+        {LINKS.googleReview && (
+          <InfoBtn icon={I.star(20)} label="รีวิว" onClick={() => window.open(LINKS.googleReview!, '_blank')} />
+        )}
       </div>
 
       {/* ── e) "กำลังพัฒนา" card ────────────────────────── */}
@@ -271,11 +294,7 @@ export default function Landing() {
           <div style={{ padding: '8px 18px 0' }}>
             <div className="kicker" style={{ marginBottom: 4 }}>เดลิเวอรี่ · DELIVERY</div>
             <div style={{ fontFamily: 'var(--serif)', fontSize: 18, marginBottom: 20 }}>เลือกแพลตฟอร์ม</div>
-            {([
-              { name: 'Grab Food',   href: LINKS.grab,       dot: '#00B14F' },
-              { name: 'LINE MAN',    href: LINKS.lineman,    dot: '#06C755' },
-              { name: 'Shopee Food', href: LINKS.shopeeFood, dot: '#EE4D2D' },
-            ] as const).map(p => (
+            {deliveryLinks.map(p => (
               <a
                 key={p.name}
                 href={p.href}
@@ -321,10 +340,7 @@ export default function Landing() {
           <div style={{ padding: '8px 18px 0' }}>
             <div className="kicker" style={{ marginBottom: 4 }}>ติดตามเรา · FOLLOW US</div>
             <div style={{ fontFamily: 'var(--serif)', fontSize: 18, marginBottom: 20 }}>Social Media</div>
-            {([
-              { name: 'LINE Official', href: LINKS.line,     dot: '#06C755' },
-              { name: 'Facebook Page', href: LINKS.facebook, dot: '#1877F2' },
-            ] as const).map(s => (
+            {socialLinks.map(s => (
               <a
                 key={s.name}
                 href={s.href}

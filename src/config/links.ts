@@ -1,18 +1,20 @@
-// All external URLs in one place — replace placeholders before launch
+// All external URLs — set to null while placeholder, real URL string when live.
+// Setting a value from null → URL string makes its button appear automatically.
 
-export const LINKS = {
-  // Delivery platforms
-  grab:         'https://food.grab.com/',             // TODO: real deep link
-  lineman:      'https://www.lineman.me/',            // TODO: real deep link
-  shopeeFood:   'https://shopee.co.th/food/',         // TODO: real deep link
-
-  // Branch location
-  googleMaps:   'https://maps.google.com/',           // TODO: Thonglor Soi 13 pin
-
-  // Social
-  line:         'https://line.me/R/ti/p/@bestpart',   // TODO: real LINE OA ID
-  facebook:     'https://facebook.com/bestpartbowls', // TODO: real page URL
-
-  // Reviews
-  googleReview: 'https://g.page/r/bestpart/review',   // TODO: real review link
-} as const;
+export const LINKS: {
+  grab:         string | null;
+  lineman:      string | null;
+  shopeeFood:   string | null;
+  googleMaps:   string | null;
+  line:         string | null;
+  facebook:     string | null;
+  googleReview: string | null;
+} = {
+  grab:         null,  // TODO: Grab Food deep link for this branch
+  lineman:      null,  // TODO: LINE MAN deep link for this branch
+  shopeeFood:   null,  // TODO: Shopee Food deep link for this branch
+  googleMaps:   null,  // TODO: Google Maps pin for Thonglor Soi 13
+  line:         null,  // TODO: LINE OA link
+  facebook:     null,  // TODO: Facebook page URL
+  googleReview: null,  // TODO: Google review link
+};

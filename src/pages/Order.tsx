@@ -113,19 +113,6 @@ export default function Order() {
         {/* Item list */}
         <div style={{ flex: 1, padding: '16px 16px 0' }}>
 
-          {/* Promo glass card */}
-          <div className="glass" style={{
-            marginBottom: 14, padding: '12px 14px', borderRadius: 'var(--r-md)',
-            display: 'flex', alignItems: 'center', gap: 10,
-          }}>
-            <span style={{ color: 'var(--gold)' }}>{I.star(16)}</span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: 'var(--serif)', fontSize: 12.5 }}>โปรพิเศษวันนี้</div>
-              <div style={{ fontSize: 10, color: 'var(--ink-3)' }}>ลด 10% เมื่อสั่งครบ ฿200</div>
-            </div>
-            <span style={{ color: 'var(--ink-2)' }}>{I.arrow(13)}</span>
-          </div>
-
           {/* Section header */}
           {activeCatData && (
             <>

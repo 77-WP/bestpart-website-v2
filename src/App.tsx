@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { CartProvider } from './store/cart';
 import Landing  from './pages/Landing';
 import Order    from './pages/Order';
@@ -6,7 +6,7 @@ import Product  from './pages/Product';
 import Cart     from './pages/Cart';
 import Checkout from './pages/Checkout';
 import Track    from './pages/Track';
-import Me       from './pages/Me';
+import Orders   from './pages/Orders';
 
 export default function App() {
   return (
@@ -20,7 +20,8 @@ export default function App() {
           <Route path="/checkout"       element={<Checkout />} />
           <Route path="/track"          element={<Track />} />
           <Route path="/track/:orderId" element={<Track />} />
-          <Route path="/me"             element={<Me />} />
+          <Route path="/orders"         element={<Orders />} />
+          <Route path="/me"             element={<Navigate to="/orders" replace />} />
         </Routes>
       </CartProvider>
     </BrowserRouter>

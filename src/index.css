@@ -87,35 +87,16 @@ button { font-family: inherit; cursor: pointer; }
   text-transform: uppercase;
 }
 
-/* Tab bar */
-.tabbar {
-  position: fixed; left: 0; right: 0; bottom: 0;
-  height: 68px;
-  background: var(--bg-2);
-  border-top: 1px solid var(--line);
-  display: grid; grid-template-columns: repeat(4,1fr);
-  z-index: 30;
-  padding-bottom: 10px;
-  max-width: 480px;
-  margin: 0 auto;
-}
-.tab {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 4px;
-  font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
-  color: var(--ink-3);
-  text-transform: uppercase;
-  background: none; border: 0; padding: 0;
-}
-.tab.active { color: var(--ink); }
-.tab-dot { width: 4px; height: 4px; border-radius: 50%; }
-.tab.active .tab-dot { background: var(--accent); }
+/* Tab bar — floating pill design; styles live in TabBar.tsx (inline) */
+.tabbar { display: none; }
+.tab    { display: none; }
+.tab-dot{ display: none; }
 
-/* Cart bar */
+/* Cart bar — sits above the floating pill nav */
 .cart-bar {
   position: fixed;
   left: 50%; transform: translateX(-50%);
-  bottom: 80px;
+  bottom: calc(88px + env(safe-area-inset-bottom, 0px));
   width: calc(100% - 32px);
   max-width: 448px;
   display: flex; align-items: center; gap: 12px;

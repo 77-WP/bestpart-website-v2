@@ -4,6 +4,8 @@ import { supabase, STATUS_STEP, type OrderRow } from '../lib/supabase';
 import { Bowl } from '../components/Bowl';
 import { TabBar } from '../components/TabBar';
 import { I } from '../components/icons';
+import { shopCloseLabel } from '../config/shop';
+import { TEST_MODE } from '../config/env';
 
 /* ── Status → UI config ─────────────────────────────────── */
 const STATUS_UI: Record<string, { th: string; en: string; color: string; bg: string }> = {
@@ -182,23 +184,26 @@ export default function Track() {
   const showRing  = status === 'pending' || status === 'preparing';
 
   /* Parse items from jsonb */
-  const orderItems = Array.isArray(order.items)
-    ? (order.items as { name: string; qty: number; total: number; tone?: string; topping?: string }[])
-    : [];
+  const orderItems = (Array.isArray(order.items)
+    ? (order.items as { name: string; qty: number; total: number; tone?: string; topping?: string; item_id?: string }[])
+    : []
+  ).filter(it => TEST_MODE || it.item_id !== 'test-1baht');
 
   /* Timestamp label */
   const createdAt = new Date(order.created_at);
   const timeStr   = createdAt.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
 
   return (
-    <div className="page" style={{ paddingBottom: 80 }}>
+    <div className="page" style={{ paddingBottom: 120 }}>
 
       {/* Header */}
       <div style={{
-        padding: '16px 18px 12px', borderBottom: '1px solid var(--line)',
+        paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))',
+        paddingBottom: 12, paddingLeft: 18, paddingRight: 18,
+        borderBottom: '1px solid var(--line)',
         display: 'flex', alignItems: 'center', gap: 12,
       }}>
-        <button onClick={() => navigate('/')} style={{ background: 'none', border: 0, padding: 0, color: 'var(--ink)' }}>
+        <button onClick={() => navigate('/orders')} style={{ background: 'none', border: 0, padding: 0, color: 'var(--ink)' }}>
           {I.back(22)}
         </button>
         <div style={{ flex: 1 }}>
@@ -207,14 +212,6 @@ export default function Track() {
             #{order.order_number}
           </div>
         </div>
-        <span style={{
-          fontSize: 9, fontWeight: 700, letterSpacing: '.05em',
-          color: 'var(--accent-2)', background: 'rgba(74,93,63,0.14)',
-          padding: '4px 8px', borderRadius: 'var(--r-pill)',
-          maxWidth: 120, textAlign: 'center', lineHeight: 1.3,
-        }}>
-          หน้านี้จะเปิดขึ้น<br />อัตโนมัติเมื่อคุณกลับมา
-        </span>
       </div>
 
       {/* ── Status hero ── */}
@@ -273,7 +270,7 @@ export default function Track() {
             <span style={{ color: 'var(--accent-2)' }}>{I.pin(18)}</span>
             <div style={{ flex: 1 }}>
               <div style={{ fontFamily: 'var(--serif)', fontSize: 13 }}>สาขาทองหล่อ ซอย 13</div>
-              <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 1 }}>เปิดถึง 22:00 · 1.2 กม.</div>
+              <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 1 }}>เปิดถึง {shopCloseLabel()}</div>
             </div>
             <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>นำทาง</span>
           </div>
@@ -367,21 +364,6 @@ export default function Track() {
             <span className="thb price" style={{ fontSize: 18 }}>{order.grand_total}</span>
           </div>
         </div>
-      </div>
-
-      {/* ── Reorder CTA ── */}
-      <div style={{ padding: '18px 18px 0' }}>
-        <button
-          onClick={() => navigate('/order')}
-          style={{
-            width: '100%', background: 'var(--bg-2)', color: 'var(--ink)',
-            border: '1px solid var(--line-2)', borderRadius: 'var(--r-pill)',
-            padding: '13px 18px', fontWeight: 600, fontSize: 13, letterSpacing: '.03em',
-            display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8,
-          }}
-        >
-          {I.repeat(14)} สั่งซ้ำทันที
-        </button>
       </div>
 
       <div style={{ height: 24 }} />

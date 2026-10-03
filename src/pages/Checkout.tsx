@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { I } from '../components/icons';
 import { SHOP, shopCloseLabel, computeSlots, type ShopInfo } from '../config/shop';
 import { TEST_MODE, ENABLE_BEAM } from '../config/env';
+import { saveLocalOrder } from '../lib/localOrders';
 
 const METHODS = [
   { id: 'dine',     label: 'ทานที่ร้าน', labelEn: 'Dine-in' },
@@ -143,6 +144,9 @@ export default function Checkout() {
 
     const orderId = data.id;
 
+    /* Persist order id locally so the Orders tab can show it without auth */
+    saveLocalOrder(orderId, new Date().toISOString());
+
     /* INSERT order_contacts — fail silently */
     supabase
       .from('order_contacts')
@@ -236,7 +240,7 @@ export default function Checkout() {
             <div style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '.06em', textTransform: 'uppercase' }}>รับที่</div>
             <div style={{ fontFamily: 'var(--serif)', fontSize: 14 }}>{SHOP.branchName}</div>
             <div style={{ fontSize: 11, color: 'var(--ink-2)', marginTop: 1 }}>
-              เปิดถึง {shopCloseLabel()} · 1.2 กม.
+              เปิดถึง {shopCloseLabel()}
             </div>
           </div>
           <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>เปลี่ยน</span>

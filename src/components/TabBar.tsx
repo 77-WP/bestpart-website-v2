@@ -1,10 +1,36 @@
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
+import { getLocalOrderIds } from '../lib/localOrders';
 import { I } from './icons';
 
 type TabId = 'home' | 'menu' | 'orders' | 'me'; // 'me' accepted for legacy, treated as 'orders'
 
-export function TabBar({ active }: { active: TabId }) {
+const ACTIVE_STATUSES = ['awaiting_payment', 'pending', 'preparing'];
+
+/** Lightweight hook — checks localStorage ids against DB once on mount. */
+function useHasActiveOrders(override?: boolean): boolean {
+  const [hasActive, setHasActive] = useState(override ?? false);
+
+  useEffect(() => {
+    if (override !== undefined) { setHasActive(override); return; }
+    const ids = getLocalOrderIds();
+    if (ids.length === 0) return;
+    supabase
+      .from('orders')
+      .select('id')
+      .in('id', ids)
+      .in('status', ACTIVE_STATUSES)
+      .limit(1)
+      .then(({ data }) => { setHasActive((data?.length ?? 0) > 0); }, () => { /* fail silently */ });
+  }, [override]);
+
+  return hasActive;
+}
+
+export function TabBar({ active, hasActiveOrder }: { active: TabId; hasActiveOrder?: boolean }) {
   const navigate = useNavigate();
+  const hasActive = useHasActiveOrders(hasActiveOrder);
 
   const eff = active === 'me' ? 'orders' : active;
 
@@ -75,8 +101,8 @@ export function TabBar({ active }: { active: TabId }) {
           style={{ ...sideBtn(eff === 'orders'), position: 'relative' }}
         >
           {I.receipt(20)}
-          {/* Badge dot — flip to true when active order exists */}
-          {false && (
+          {/* Badge dot — shown when there is an active order on this device */}
+          {hasActive && (
             <span style={{
               position: 'absolute',
               top: 8,

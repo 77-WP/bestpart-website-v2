@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { Bowl } from '../components/Bowl';
 import { useCart, type CartItem } from '../store/cart';
 import { I } from '../components/icons';
+import { TEST_MODE } from '../config/env';
 
 type MenuItemRow = {
   id: string;
@@ -12,6 +13,15 @@ type MenuItemRow = {
   base_price: number;
   image_url: string | null;
   is_best_seller: boolean;
+};
+
+const TEST_ITEM_ROW: MenuItemRow = {
+  id: 'test-1baht',
+  name_th: 'ทดสอบ ฿1',
+  name_en: 'Test Item ฿1',
+  base_price: 1,
+  image_url: null,
+  is_best_seller: false,
 };
 
 const SIZES = [
@@ -41,13 +51,18 @@ export default function Product() {
 
   const [item, setItem]         = useState<MenuItemRow | null>(null);
   const [loading, setLoading]   = useState(true);
-  const [sizeIdx, setSizeIdx]   = useState(1);
+  const [sizeIdx, setSizeIdx]   = useState(TEST_MODE && itemId === 'test-1baht' ? 0 : 1);
   const [spiceIdx, setSpiceIdx] = useState(2);
   const [addons, setAddons]     = useState<Set<string>>(new Set(['sauce']));
   const [qty, setQty]           = useState(1);
 
   useEffect(() => {
     if (!itemId) return;
+    if (TEST_MODE && itemId === 'test-1baht') {
+      setItem(TEST_ITEM_ROW);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     supabase
       .from('menu_items')

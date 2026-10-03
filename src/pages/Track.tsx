@@ -7,10 +7,11 @@ import { I } from '../components/icons';
 
 /* ── Status → UI config ─────────────────────────────────── */
 const STATUS_UI: Record<string, { th: string; en: string; color: string; bg: string }> = {
-  pending:   { th: 'รับออเดอร์แล้ว',  en: 'ORDER RECEIVED',   color: 'var(--gold)',     bg: 'rgba(184,134,46,0.12)' },
-  preparing: { th: 'กำลังเตรียม',     en: 'IN THE KITCHEN',   color: 'var(--accent-2)', bg: 'rgba(74,93,63,0.12)'   },
-  ready:     { th: 'พร้อมให้รับแล้ว', en: 'READY FOR PICKUP', color: 'var(--accent)',   bg: 'rgba(181,81,30,0.12)'  },
-  completed: { th: 'รับเรียบร้อย',    en: 'PICKED UP',        color: 'var(--accent-2)', bg: 'rgba(74,93,63,0.12)'   },
+  awaiting_payment: { th: 'รอชำระเงิน',      en: 'AWAITING PAYMENT', color: 'var(--gold)',     bg: 'rgba(184,134,46,0.12)' },
+  pending:          { th: 'รับออเดอร์แล้ว',  en: 'ORDER RECEIVED',   color: 'var(--gold)',     bg: 'rgba(184,134,46,0.12)' },
+  preparing:        { th: 'กำลังเตรียม',     en: 'IN THE KITCHEN',   color: 'var(--accent-2)', bg: 'rgba(74,93,63,0.12)'   },
+  ready:            { th: 'พร้อมให้รับแล้ว', en: 'READY FOR PICKUP', color: 'var(--accent)',   bg: 'rgba(181,81,30,0.12)'  },
+  completed:        { th: 'รับเรียบร้อย',    en: 'PICKED UP',        color: 'var(--accent-2)', bg: 'rgba(74,93,63,0.12)'   },
 };
 
 const STEPS = [
@@ -145,6 +146,10 @@ export default function Track() {
       .then(({ data, error }) => {
         setLoading(false);
         if (error || !data) { setNotFound(true); return; }
+        if (data.status === 'awaiting_payment') {
+          navigate(`/pay/${orderId}`, { replace: true });
+          return;
+        }
         setOrder(data as OrderRow);
       });
   }, [orderId]);

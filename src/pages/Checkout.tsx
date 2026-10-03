@@ -4,7 +4,7 @@ import { useCart, cartTotal, itemTotal } from '../store/cart';
 import { supabase } from '../lib/supabase';
 import { I } from '../components/icons';
 import { SHOP, shopCloseLabel, computeSlots, type ShopInfo } from '../config/shop';
-import { TEST_MODE } from '../config/env';
+import { TEST_MODE, ENABLE_BEAM } from '../config/env';
 
 const METHODS = [
   { id: 'dine',     label: 'ทานที่ร้าน', labelEn: 'Dine-in' },
@@ -57,7 +57,7 @@ export default function Checkout() {
 
   const [method,    setMethod]  = useState('takeaway');
   const [timeSlot,  setTime]    = useState(0);
-  const [payment,   setPayment] = useState('promptpay');
+  const [payment,   setPayment] = useState(ENABLE_BEAM ? 'promptpay' : 'cash');
 
   const [name,      setName]    = useState('');
   const [phone,     setPhone]   = useState('');
@@ -96,6 +96,7 @@ export default function Checkout() {
     }));
 
     const selectedSlot = shopInfo.slots[timeSlot];
+    const isBeam = payment === 'promptpay';
 
     const { data, error: dbError } = await supabase
       .from('orders')
@@ -105,25 +106,41 @@ export default function Checkout() {
         discount_amount:         0,
         delivery_fee:            0,
         grand_total:             total,
-        status:                  'pending',
+        status:                  isBeam ? 'awaiting_payment' : 'pending',
         payment_status:          'pending',
         fulfillment_type:        FULFILLMENT_MAP[method] ?? 'takeaway',
-        checkout_payment_method: payment,
+        checkout_payment_method: isBeam ? 'promptpay' : 'cash',
+        internal_notes:          isBeam ? null : 'จ่ายที่ร้าน',
         pickup_time:             selectedSlot?.value ?? 'โดยเร็วที่สุด',
         source:                  'web',
       })
       .select('id')
       .single();
 
-    setLoading(false);
-
     if (dbError || !data) {
+      setLoading(false);
       setError('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
       return;
     }
 
+    const orderId = data.id;
+
+    /* INSERT order_contacts — fail silently */
+    supabase
+      .from('order_contacts')
+      .insert({ order_id: orderId, name: name.trim(), phone: digitsOnly(phone) })
+      .then(({ error: contactErr }) => {
+        if (contactErr) console.error('order_contacts insert failed:', contactErr.message);
+      });
+
     clear();
-    navigate(`/track/${data.id}`);
+
+    if (isBeam) {
+      /* Beam path — navigate to /pay first; Pay page calls create-beam-charge */
+      navigate(`/pay/${orderId}`);
+    } else {
+      navigate(`/track/${orderId}`);
+    }
   }
 
   return (
@@ -307,7 +324,7 @@ export default function Checkout() {
       {/* Payment */}
       <div style={{ padding: '18px 18px 0' }}>
         <div className="kicker muted" style={{ marginBottom: 8 }}>ชำระเงิน · PAYMENT</div>
-        {PAYMENT_OPTS.map(p => (
+        {PAYMENT_OPTS.filter(p => ENABLE_BEAM || p.id !== 'promptpay').map(p => (
           <label
             key={p.id}
             onClick={() => setPayment(p.id)}
@@ -367,7 +384,13 @@ export default function Checkout() {
           }}
         >
           <span>
-            {loading ? 'กำลังสร้างออเดอร์…' : !shopInfo.isOpen ? 'ร้านปิดอยู่' : 'ยืนยันและชำระเงิน'}
+            {loading
+              ? 'กำลังสร้างออเดอร์…'
+              : !shopInfo.isOpen
+                ? 'ร้านปิดอยู่'
+                : payment === 'promptpay'
+                  ? 'ชำระเงิน'
+                  : 'ยืนยันออเดอร์'}
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span className="thb" style={{ fontFamily: 'var(--mono)', fontSize: 16 }}>{total}</span>

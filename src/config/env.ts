@@ -3,3 +3,6 @@
 
 /** True only when VITE_TEST_MODE=true is set in .env.local */
 export const TEST_MODE = import.meta.env.VITE_TEST_MODE === 'true';
+
+/** True only when VITE_ENABLE_BEAM=true is set in .env.local */
+export const ENABLE_BEAM = import.meta.env.VITE_ENABLE_BEAM === 'true';

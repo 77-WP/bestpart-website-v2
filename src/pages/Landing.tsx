@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useLang } from '../store/lang';
 import { Brand } from '../components/Brand';
 import { TabBar } from '../components/TabBar';
 import { I } from '../components/icons';
@@ -116,6 +117,7 @@ function InfoBtn({ icon, label, onClick }: { icon: React.ReactNode; label: strin
 ══════════════════════════════════════════════════════════ */
 export default function Landing() {
   const navigate = useNavigate();
+  const { lang, setLang } = useLang();
 
   const [sheet, setSheet] = useState<Sheet>(null);
   // hero: null = probing, true = visible, false = hidden
@@ -169,11 +171,26 @@ export default function Landing() {
             background: 'var(--bg-3)', borderRadius: 'var(--r-pill)',
             fontSize: 11, fontWeight: 700, letterSpacing: '0.04em',
           }}>
-            <span style={{
-              padding: '3px 9px', borderRadius: 'var(--r-pill)',
-              background: 'var(--ink)', color: 'var(--on-accent)',
-            }}>TH</span>
-            <span style={{ padding: '3px 9px', color: 'var(--ink-3)' }}>EN</span>
+            <button
+              onClick={() => setLang('th')}
+              style={{
+                padding: '3px 9px', borderRadius: 'var(--r-pill)',
+                background: lang === 'th' ? 'var(--ink)' : 'transparent',
+                color: lang === 'th' ? 'var(--on-accent)' : 'var(--ink-3)',
+                border: 0, fontWeight: 700, fontSize: 11, letterSpacing: '0.04em',
+                cursor: 'pointer',
+              }}
+            >TH</button>
+            <button
+              onClick={() => setLang('en')}
+              style={{
+                padding: '3px 9px', borderRadius: 'var(--r-pill)',
+                background: lang === 'en' ? 'var(--ink)' : 'transparent',
+                color: lang === 'en' ? 'var(--on-accent)' : 'var(--ink-3)',
+                border: 0, fontWeight: 700, fontSize: 11, letterSpacing: '0.04em',
+                cursor: 'pointer',
+              }}
+            >EN</button>
           </div>
         </div>
       </div>

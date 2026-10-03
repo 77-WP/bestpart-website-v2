@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { CartProvider } from './store/cart';
+import { LangProvider } from './store/lang';
 import Landing  from './pages/Landing';
 import Order    from './pages/Order';
 import Product  from './pages/Product';
@@ -12,6 +13,7 @@ import Pay      from './pages/Pay';
 export default function App() {
   return (
     <BrowserRouter>
+      <LangProvider>
       <CartProvider>
         <Routes>
           <Route path="/"               element={<Landing />} />
@@ -26,6 +28,7 @@ export default function App() {
           <Route path="/me"             element={<Navigate to="/orders" replace />} />
         </Routes>
       </CartProvider>
+      </LangProvider>
     </BrowserRouter>
   );
 }

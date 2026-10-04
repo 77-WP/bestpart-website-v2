@@ -5,6 +5,7 @@
      'taste' → Section B "รสชาติในแบบคุณ"
    exclusiveGroup:
      'doneness' → mutually exclusive with others in same exclusiveGroup
+   icon: key from I object in icons.tsx (optional, for scanability)
    Options NOT in this map default to category='taste'.
    labelTh / labelEn = display label (override if DB name is verbose).
    kitchenNote = optional note visible only to kitchen (future use).
@@ -13,6 +14,7 @@
 export type PersonalOption = {
   category: 'egg' | 'taste';
   exclusiveGroup?: string;
+  icon?: string;
   labelTh: string;
   labelEn: string;
   kitchenNote?: string;
@@ -46,15 +48,15 @@ export const PERSONALIZATION: Record<string, PersonalOption> = {
 
   /* Taste */
   'ไม่ใส่กระเทียม': {
-    category: 'taste',
+    category: 'taste', icon: 'garlic',
     labelTh: 'ไม่ใส่กระเทียม', labelEn: 'No garlic',
   },
   'ไม่รับใบกะเพรา': {
-    category: 'taste',
+    category: 'taste', icon: 'leaf',
     labelTh: 'ไม่รับใบกะเพรา', labelEn: 'No holy basil',
   },
   'ผัดไร้น้ำมัน': {
-    category: 'taste',
+    category: 'taste', icon: 'oil',
     labelTh: 'ผัดไร้น้ำมัน', labelEn: 'Stir-fry without oil',
   },
   'เผ็ดน้อยมาก': {

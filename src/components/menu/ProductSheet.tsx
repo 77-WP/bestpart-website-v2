@@ -58,14 +58,6 @@ function spiceIndex(optNameTh: string) {
   return SPICE_TH.indexOf(cleanLabel(optNameTh));
 }
 
-function renderTasteIcon(iconKey: string | undefined, size: number) {
-  if (!iconKey) return null;
-  if (iconKey === 'leaf')   return I.leaf(size);
-  if (iconKey === 'garlic') return I.garlic(size);
-  if (iconKey === 'oil')    return I.oil(size);
-  return null;
-}
-
 /* ── Props ───────────────────────────────────────────────── */
 type Props = {
   isShopOpen: boolean;
@@ -623,6 +615,7 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
                                 const label = lang === 'en'
                                   ? (cleanLabel(opt.option_name_en) || cleanLabel(opt.option_name_th))
                                   : cleanLabel(opt.option_name_th);
+                                const isLarge = isSize && opt.price_adjustment > 0;
                                 return (
                                   <motion.button
                                     key={opt.id}
@@ -634,10 +627,15 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
                                       background: sel ? 'var(--bg-2)' : 'var(--bg)',
                                       color: sel ? 'var(--ink)' : 'var(--ink-2)',
                                       fontSize: 13, fontFamily: 'var(--serif)',
-                                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                                      display: 'inline-flex', alignItems: 'center', gap: 5,
                                       minHeight: 44,
                                     }}
                                   >
+                                    {isSize && (
+                                      <span style={{ opacity: sel ? 0.9 : 0.45, flexShrink: 0 }}>
+                                        {isLarge ? I.bowlLg(16) : I.bowlMd(13)}
+                                      </span>
+                                    )}
                                     {sel && <span style={{ color: 'var(--accent)', fontSize: 10 }}>{I.check(10)}</span>}
                                     <span>{label}</span>
                                     {opt.price_adjustment > 0 && (
@@ -700,8 +698,8 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
                     {/* Doneness — exclusive, tap same to deselect */}
                     {eggDoneness.length > 0 && (
                       <div style={{
-                        display: 'flex', gap: 7, flexWrap: 'wrap',
-                        marginBottom: eggAdditive.length > 0 ? 10 : 0,
+                        display: 'flex', gap: 6, flexWrap: 'wrap',
+                        marginBottom: eggAdditive.length > 0 ? 8 : 0,
                       }}>
                         {eggDoneness.map(opt => {
                           const sel   = isSelected(opt.groupId, opt.id);
@@ -715,7 +713,7 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
                               whileTap={prefersReduced ? undefined : { scale: 0.94 }}
                               onClick={() => handleEggDoneness(opt)}
                               style={{
-                                minHeight: 44, padding: '10px 16px', borderRadius: 'var(--r-pill)',
+                                minHeight: 38, padding: '7px 12px', borderRadius: 'var(--r-pill)',
                                 border: sel ? '1.5px solid var(--accent)' : '1px solid var(--line)',
                                 background: sel ? 'rgba(181,81,30,0.08)' : 'var(--bg)',
                                 color: sel ? 'var(--accent)' : 'var(--ink-2)',
@@ -739,7 +737,7 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
 
                     {/* Additive egg chips — multi-select */}
                     {eggAdditive.length > 0 && (
-                      <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         {eggAdditive.map(opt => {
                           const sel   = isSelected(opt.groupId, opt.id);
                           const po    = PERSONALIZATION[opt.option_name_th.trim()];
@@ -752,7 +750,7 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
                               whileTap={prefersReduced ? undefined : { scale: 0.94 }}
                               onClick={() => handleSelect(opt.groupId, opt.id, 'MULTI_SELECT')}
                               style={{
-                                minHeight: 44, padding: '10px 16px', borderRadius: 'var(--r-pill)',
+                                minHeight: 38, padding: '7px 12px', borderRadius: 'var(--r-pill)',
                                 border: sel ? '1.5px solid var(--accent)' : '1px solid var(--line)',
                                 background: sel ? 'rgba(181,81,30,0.08)' : 'var(--bg)',
                                 color: sel ? 'var(--accent)' : 'var(--ink-2)',
@@ -785,21 +783,20 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
                         <span style={{ fontSize: 10, color: 'var(--ink-3)' }}>{T.noExtraCharge}</span>
                       )}
                     </div>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       {tasteOptions.map(opt => {
                         const sel   = isSelected(opt.groupId, opt.id);
                         const po    = PERSONALIZATION[opt.option_name_th.trim()];
                         const label = lang === 'en'
                           ? (po?.labelEn ?? cleanLabel(opt.option_name_en || opt.option_name_th))
                           : (po?.labelTh ?? cleanLabel(opt.option_name_th));
-                        const iconNode = !sel ? renderTasteIcon(po?.icon, 11) : null;
                         return (
                           <motion.button
                             key={opt.id}
                             whileTap={prefersReduced ? undefined : { scale: 0.94 }}
                             onClick={() => handleSelect(opt.groupId, opt.id, 'MULTI_SELECT')}
                             style={{
-                              minHeight: 44, padding: '10px 16px', borderRadius: 'var(--r-pill)',
+                              minHeight: 38, padding: '7px 12px', borderRadius: 'var(--r-pill)',
                               border: sel ? '1.5px solid var(--accent)' : '1px solid var(--line)',
                               background: sel ? 'rgba(181,81,30,0.06)' : 'var(--bg)',
                               color: sel ? 'var(--accent)' : 'var(--ink-2)',
@@ -814,9 +811,6 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
                                 style={{ fontSize: 10 }}
                               >{I.check(10)}</motion.span>
                             )}
-                            {iconNode && (
-                              <span style={{ opacity: 0.45 }}>{iconNode}</span>
-                            )}
                             {label}
                           </motion.button>
                         );
@@ -825,61 +819,47 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
                   </div>
                 )}
 
-                {/* 4) เพิ่มเติมให้มื้อนี้ — quieter, clear divider, no "Add-On" */}
+                {/* 4) เพิ่มเติมให้มื้อนี้ — single heading, flat chip list, no sub-group labels */}
                 {extrasGroups.length > 0 && (
                   <div style={{ marginTop: 8 }}>
                     <div style={{ height: 1, background: 'var(--line)', marginBottom: 16 }} />
                     <div style={{
                       fontSize: 11, fontWeight: 600,
-                      color: 'var(--ink-3)', marginBottom: 14,
+                      color: 'var(--ink-3)', marginBottom: 12,
                     }}>{T.extrasTitle}</div>
-
-                    {extrasGroups.map(g => {
-                      const selectedIds = selections[g.id] ?? [];
-                      const groupLabel  = lang === 'en'
-                        ? (cleanLabel(g.group_name_en) || cleanLabel(g.group_name_th))
-                        : cleanLabel(g.group_name_th);
-                      return (
-                        <div key={g.id} style={{ marginBottom: 16 }}>
-                          {groupLabel && (
-                            <div style={{ fontSize: 11, color: 'var(--ink-3)', fontWeight: 500, marginBottom: 8 }}>
-                              {groupLabel}
-                            </div>
-                          )}
-                          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
-                            {g.options.map(opt => {
-                              const sel   = selectedIds.includes(opt.id);
-                              const label = lang === 'en'
-                                ? (cleanLabel(opt.option_name_en) || cleanLabel(opt.option_name_th))
-                                : cleanLabel(opt.option_name_th);
-                              return (
-                                <motion.button
-                                  key={opt.id}
-                                  whileTap={prefersReduced ? undefined : { scale: 0.94 }}
-                                  onClick={() => handleSelect(g.id, opt.id, g.selection_type)}
-                                  style={{
-                                    minHeight: 40, padding: '8px 12px', borderRadius: 'var(--r-pill)',
-                                    border: sel ? '1.5px solid var(--ink-2)' : '1px solid var(--line)',
-                                    background: sel ? 'var(--bg-3)' : 'var(--bg)',
-                                    color: sel ? 'var(--ink-2)' : 'var(--ink-3)',
-                                    fontSize: 12, fontFamily: 'var(--serif)',
-                                    display: 'inline-flex', alignItems: 'center', gap: 5,
-                                  }}
-                                >
-                                  {sel && <span style={{ fontSize: 10 }}>{I.check(10)}</span>}
-                                  {label}
-                                  {opt.price_adjustment > 0 && (
-                                    <span style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 600 }}>
-                                      +฿{opt.price_adjustment}
-                                    </span>
-                                  )}
-                                </motion.button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
+                    <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+                      {extrasGroups.flatMap(g =>
+                        g.options.map(opt => {
+                          const sel   = (selections[g.id] ?? []).includes(opt.id);
+                          const label = lang === 'en'
+                            ? (cleanLabel(opt.option_name_en) || cleanLabel(opt.option_name_th))
+                            : cleanLabel(opt.option_name_th);
+                          return (
+                            <motion.button
+                              key={opt.id}
+                              whileTap={prefersReduced ? undefined : { scale: 0.94 }}
+                              onClick={() => handleSelect(g.id, opt.id, g.selection_type)}
+                              style={{
+                                minHeight: 40, padding: '8px 12px', borderRadius: 'var(--r-pill)',
+                                border: sel ? '1.5px solid var(--ink-2)' : '1px solid var(--line)',
+                                background: sel ? 'var(--bg-3)' : 'var(--bg)',
+                                color: sel ? 'var(--ink-2)' : 'var(--ink-3)',
+                                fontSize: 12, fontFamily: 'var(--serif)',
+                                display: 'inline-flex', alignItems: 'center', gap: 5,
+                              }}
+                            >
+                              {sel && <span style={{ fontSize: 10 }}>{I.check(10)}</span>}
+                              {label}
+                              {opt.price_adjustment > 0 && (
+                                <span style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 600 }}>
+                                  +฿{opt.price_adjustment}
+                                </span>
+                              )}
+                            </motion.button>
+                          );
+                        })
+                      )}
+                    </div>
                   </div>
                 )}
 

@@ -6,8 +6,8 @@ import { I } from '../components/icons';
 import { SHOP } from '../config/shop';
 import { LINKS } from '../config/links';
 import { TEST_MODE } from '../config/env';
-import { useLang } from '../store/lang';
-import { LANG_MAP, type LangDict } from '../config/lang';
+import { useT } from '../i18n';
+import type { Dict } from '../i18n';
 import { getLocalOrders } from '../lib/localOrders';
 
 /* ── Recipient label — single point to swap for daily code ── */
@@ -119,8 +119,7 @@ function OrderNotFound({ orderId }: { orderId: string }) {
 export default function Track() {
   const { orderId }   = useParams<{ orderId: string }>();
   const navigate      = useNavigate();
-  const { lang }      = useLang();
-  const L             = LANG_MAP[lang];
+  const { t, lang, dict } = useT();
 
   const [order,    setOrder]    = useState<OrderRow | null>(null);
   const [loading,  setLoading]  = useState(true);
@@ -147,7 +146,7 @@ export default function Track() {
         if (error || !data) { setNotFound(true); return; }
         setOrder(data as OrderRow);
         prevStatus.current = data.status;
-        document.title = statusDocTitle(data.status, lang);
+        document.title = statusDocTitle(data.status, lang as 'th' | 'en');
       });
   }, [orderId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -166,7 +165,7 @@ export default function Track() {
             if (newStatus !== prevStatus.current) {
               prevStatus.current = newStatus;
               setAnimKey(k => k + 1);
-              document.title = statusDocTitle(newStatus, lang);
+              document.title = statusDocTitle(newStatus, lang as 'th' | 'en');
             }
             return updated;
           });
@@ -212,7 +211,7 @@ export default function Track() {
   const createdHHMM = toBkkHHMM(new Date(order.created_at));
 
   /* ── Hero config ──────────────────────────────────────── */
-  const hero = heroConfig(status, L);
+  const hero = heroConfig(status, t);
 
   const animStyle: React.CSSProperties = reducedMotion ? {} : {
     animation: `bpFadeIn 0.35s ease both`,
@@ -241,12 +240,12 @@ export default function Track() {
         <button
           onClick={() => navigate('/orders')}
           style={{ background: 'none', border: 0, padding: '4px 4px 4px 0', color: 'var(--ink)', flexShrink: 0 }}
-          aria-label="กลับ"
+          aria-label={t('track.back')}
         >
           {I.back(22)}
         </button>
         <div style={{ fontFamily: 'var(--serif)', fontSize: 15 }}>
-          {L.trackTitle}
+          {t('track.title')}
         </div>
       </div>
 
@@ -288,8 +287,8 @@ export default function Track() {
         {showEta && eta && (
           <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 6 }}>
             {eta.minsLeft > 0
-              ? L.trackEta(eta.hhmm, eta.minsLeft)
-              : L.trackAlmostReady}
+              ? t('track.eta', eta.hhmm, eta.minsLeft)
+              : t('track.almostReady')}
           </div>
         )}
 
@@ -303,7 +302,7 @@ export default function Track() {
               fontWeight: 700, fontSize: 14, letterSpacing: '0.03em',
             }}
           >
-            {L.trackGoToPay}
+            {t('track.goToPay')}
           </button>
         )}
 
@@ -318,10 +317,10 @@ export default function Track() {
       {/* ── Step progress row ─────────────────────────────── */}
       <div style={{ padding: '24px 16px 0' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 0 }}>
-          {L.trackSteps.map((label, i) => {
+          {(dict['track.steps'] as string[]).map((label, i) => {
             const done    = stepIdx >= i;
             const current = stepIdx === i;
-            const isLast  = i === L.trackSteps.length - 1;
+            const isLast  = i === (dict['track.steps'] as string[]).length - 1;
             return (
               <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
                 {/* Connector line */}
@@ -370,7 +369,7 @@ export default function Track() {
           borderRadius: 'var(--r-sm)',
           fontSize: 13, color: 'var(--gold)', fontWeight: 600, textAlign: 'center',
         }}>
-          {L.trackCashBanner(order.grand_total)}
+          {t('track.cashBanner', order.grand_total)}
         </div>
       )}
 
@@ -394,7 +393,7 @@ export default function Track() {
           marginBottom: 6,
         }}>
           {I.receipt(10)}
-          {L.trackShowToStaff.toUpperCase()}
+          {t('track.showToStaff').toUpperCase()}
         </div>
 
         {/* Recipient name / order number */}
@@ -426,10 +425,10 @@ export default function Track() {
             : isCash && !isDone ? 'rgba(251,243,227,0.65)' : 'rgba(251,243,227,0.8)',
         }}>
           {isDone
-            ? L.trackCollected
+            ? t('track.collected')
             : isCash
-              ? L.trackCash(order.grand_total)
-              : L.trackPaid}
+              ? t('track.cash', order.grand_total)
+              : t('track.paid')}
         </div>
       </div>
 
@@ -446,7 +445,7 @@ export default function Track() {
         }}
       >
         <span style={{ fontFamily: 'var(--serif)', fontSize: 13, color: 'var(--ink)' }}>
-          {L.trackNItems(orderItems.length || 1, order.grand_total)}
+          {t('track.nItems', orderItems.length || 1, order.grand_total)}
         </span>
         {I.chevron(16, 'down')}
       </button>
@@ -466,7 +465,7 @@ export default function Track() {
           }}
         >
           {I.pin(16)}
-          {L.trackDirections}
+          {t('track.directions')}
         </a>
       </div>
 
@@ -477,14 +476,14 @@ export default function Track() {
       }}>
         {!isDone ? (
           <>
-            <div>{L.trackFooter}</div>
+            <div>{t('track.footer')}</div>
             <div style={{ marginTop: 6 }}>
               <a
                 href="/order"
                 onClick={e => { e.preventDefault(); navigate('/order'); }}
                 style={{ color: 'var(--ink-3)', textDecoration: 'underline', fontSize: 11 }}
               >
-                {L.trackOrderMore}
+                {t('track.orderMore')}
               </a>
             </div>
           </>
@@ -499,14 +498,14 @@ export default function Track() {
                 fontWeight: 700, fontSize: 14, cursor: 'pointer',
               }}
             >
-              {L.trackOrderAgain}
+              {t('track.orderAgain')}
             </button>
             <a
               href="/orders"
               onClick={e => { e.preventDefault(); navigate('/orders'); }}
               style={{ color: 'var(--ink-3)', textDecoration: 'underline', fontSize: 11 }}
             >
-              {L.trackAllOrders}
+              {t('track.allOrders')}
             </a>
           </>
         )}
@@ -544,7 +543,7 @@ export default function Track() {
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             }}>
               <div style={{ fontFamily: 'var(--serif)', fontSize: 15 }}>
-                {L.trackNItems(orderItems.length || 1, order.grand_total)}
+                {t('track.nItems', orderItems.length || 1, order.grand_total)}
               </div>
               <button
                 onClick={closeSheet}
@@ -596,7 +595,7 @@ export default function Track() {
               display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
             }}>
               <div style={{ fontFamily: 'var(--serif)', fontSize: 13, color: 'var(--ink-2)' }}>
-                {lang === 'en' ? 'Total' : 'ยอดรวม'}
+                {t('track.total')}
               </div>
               <div style={{ fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 700 }}>
                 ฿{order.grand_total}
@@ -643,11 +642,11 @@ type HeroConf = {
   Icon:     () => React.ReactNode;
 };
 
-function heroConfig(status: string, L: LangDict): HeroConf {
+function heroConfig(status: string, t: (key: keyof Dict, ...args: any[]) => string): HeroConf {
   switch (status) {
     case 'awaiting_payment':
       return {
-        headline: L.trackAwaitingHeadline,
+        headline: t('track.awaitingHeadline'),
         sub:      null,
         color:    'var(--gold)',
         bg:       'rgba(184,134,46,0.14)',
@@ -655,7 +654,7 @@ function heroConfig(status: string, L: LangDict): HeroConf {
       };
     case 'pending':
       return {
-        headline: L.trackPendingHeadline,
+        headline: t('track.pendingHeadline'),
         sub:      null,
         color:    'var(--gold)',
         bg:       'rgba(184,134,46,0.14)',
@@ -663,7 +662,7 @@ function heroConfig(status: string, L: LangDict): HeroConf {
       };
     case 'preparing':
       return {
-        headline: L.trackPreparingHeadline,
+        headline: t('track.preparingHeadline'),
         sub:      null,
         color:    'var(--accent-2)',
         bg:       'rgba(74,93,63,0.14)',
@@ -671,24 +670,24 @@ function heroConfig(status: string, L: LangDict): HeroConf {
       };
     case 'ready':
       return {
-        headline: L.trackReadyHeadline,
-        sub:      L.trackReadySub,
+        headline: t('track.readyHeadline'),
+        sub:      t('track.readySub'),
         color:    'var(--accent)',
         bg:       'rgba(181,81,30,0.14)',
         Icon:     () => I.check(34),
       };
     case 'completed':
       return {
-        headline: L.trackCompletedHeadline,
-        sub:      L.trackCompletedSub,
+        headline: t('track.completedHeadline'),
+        sub:      t('track.completedSub'),
         color:    'var(--accent-2)',
         bg:       'rgba(74,93,63,0.14)',
         Icon:     () => I.receipt(30),
       };
     default:
       return {
-        headline: L.trackUnknownHeadline,
-        sub:      L.trackUnknownSub,
+        headline: t('track.unknownHeadline'),
+        sub:      t('track.unknownSub'),
         color:    'var(--ink-3)',
         bg:       'var(--bg-3)',
         Icon:     () => I.info(30),

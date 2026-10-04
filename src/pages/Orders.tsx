@@ -5,8 +5,7 @@ import { TabBar } from '../components/TabBar';
 import { I } from '../components/icons';
 import { getLocalOrders, pruneOldOrders } from '../lib/localOrders';
 import { TEST_MODE } from '../config/env';
-import { useLang } from '../store/lang';
-import { LANG_MAP } from '../config/lang';
+import { useT } from '../i18n';
 
 /* ── QR expiry fallback: treat awaiting_payment older than this as expired ─ */
 const QR_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
@@ -63,12 +62,12 @@ async function fetchOrders(ids: string[]): Promise<OrderRow[]> {
   return rows;
 }
 
-const STATUS_LABEL: Record<string, { th: string; en: string }> = {
-  awaiting_payment: { th: 'รอชำระเงิน',    en: 'Awaiting payment' },
-  pending:          { th: 'รับออเดอร์แล้ว', en: 'Order received'   },
-  preparing:        { th: 'ครัวกำลังทำ',    en: 'In the kitchen'   },
-  ready:            { th: 'พร้อมรับแล้ว',   en: 'Ready'            },
-  completed:        { th: 'รับแล้ว',        en: 'Collected'        },
+const STATUS_KEY: Record<string, 'orders.status.awaiting' | 'orders.status.pending' | 'orders.status.preparing' | 'orders.status.ready' | 'orders.status.completed'> = {
+  awaiting_payment: 'orders.status.awaiting',
+  pending:          'orders.status.pending',
+  preparing:        'orders.status.preparing',
+  ready:            'orders.status.ready',
+  completed:        'orders.status.completed',
 };
 
 const STATUS_COLOR: Record<string, { bg: string; fg: string }> = {
@@ -81,8 +80,12 @@ const STATUS_COLOR: Record<string, { bg: string; fg: string }> = {
 
 export default function Orders() {
   const navigate    = useNavigate();
-  const { lang }    = useLang();
-  const L           = LANG_MAP[lang];
+  const { t, lang } = useT();
+
+  function getStatusLabel(status: string): string {
+    const key = STATUS_KEY[status];
+    return key ? t(key) : status;
+  }
   const localOrders = getLocalOrders();
   const ids         = localOrders.map(o => o.id);
 
@@ -148,7 +151,7 @@ export default function Orders() {
     const col      = expired
       ? { bg: 'var(--bg-3)', fg: 'var(--ink-3)' }
       : STATUS_COLOR[o.status] ?? STATUS_COLOR.completed;
-    const statusTh = expired ? L.ordersExpired : (STATUS_LABEL[o.status]?.[lang] ?? o.status);
+    const statusTh = expired ? t('orders.expired') : getStatusLabel(o.status);
     const bkkDate  = new Date(new Date(o.created_at).getTime() + 7 * 3_600_000);
     const timeStr  = `${String(bkkDate.getUTCHours()).padStart(2,'0')}:${String(bkkDate.getUTCMinutes()).padStart(2,'0')}`;
     const dateStr  = bkkDate.toLocaleDateString(lang === 'th' ? 'th-TH' : 'en-GB', { day: 'numeric', month: 'short' });
@@ -218,7 +221,7 @@ export default function Orders() {
                 padding: 0, cursor: 'pointer', textDecoration: 'underline',
               }}
             >
-              {L.ordersGoToPay}
+              {t('orders.goToPay')}
             </button>
           )}
         </div>
@@ -240,9 +243,9 @@ export default function Orders() {
       paddingBottom: 12, paddingLeft: 18, paddingRight: 18,
       borderBottom: '1px solid var(--line)',
     }}>
-      <div className="kicker">{L.ordersPageTitle.toUpperCase()}</div>
+      <div className="kicker">{t('orders.pageTitle').toUpperCase()}</div>
       <div style={{ fontFamily: 'var(--serif)', fontSize: 18, marginTop: 2 }}>
-        {lang === 'th' ? 'ประวัติการสั่ง' : 'Order history'}
+        {t('orders.historyTitle')}
       </div>
     </div>
   );
@@ -275,10 +278,10 @@ export default function Orders() {
       }}>
         <div style={{ opacity: 0.22 }}>{I.receipt(52)}</div>
         <div className="h-display-th" style={{ fontSize: 20, color: 'var(--ink-2)' }}>
-          {L.ordersEmptyTitle}
+          {t('orders.emptyTitle')}
         </div>
         <div style={{ fontSize: 13, lineHeight: 1.65, maxWidth: 260 }}>
-          {L.ordersEmptyMsg}
+          {t('orders.emptyMsg')}
         </div>
         <button
           onClick={() => navigate('/order')}
@@ -289,7 +292,7 @@ export default function Orders() {
             display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
           }}
         >
-          {L.ordersEmptyBtn} {I.arrow(14)}
+          {t('orders.emptyBtn')} {I.arrow(14)}
         </button>
       </div>
       <TabBar active="orders" />
@@ -304,7 +307,7 @@ export default function Orders() {
       {/* In progress group */}
       {inProgress.length > 0 && (
         <>
-          <SectionHeader label={L.ordersInProgress} />
+          <SectionHeader label={t('orders.inProgress')} />
           {inProgress.map(o => <OrderCard key={o.id} o={o} />)}
         </>
       )}
@@ -312,7 +315,7 @@ export default function Orders() {
       {/* Earlier group */}
       {earlier.length > 0 && (
         <>
-          <SectionHeader label={L.ordersEarlier} />
+          <SectionHeader label={t('orders.earlier')} />
           {earlier.map(o => <OrderCard key={o.id} o={o} />)}
         </>
       )}
@@ -322,7 +325,7 @@ export default function Orders() {
         padding: '14px 18px',
         fontSize: 10, color: 'var(--ink-3)', textAlign: 'center', letterSpacing: '.04em',
       }}>
-        {L.ordersFooter}
+        {t('orders.footer')}
       </div>
 
       <TabBar active="orders" hasActiveOrder={hasActive} />

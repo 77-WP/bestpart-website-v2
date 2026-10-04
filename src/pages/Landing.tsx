@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useLang } from '../store/lang';
+import { useT } from '../i18n';
 import { Brand } from '../components/Brand';
 import { TabBar } from '../components/TabBar';
 import { I } from '../components/icons';
@@ -8,38 +8,25 @@ import { LINKS } from '../config/links';
 import { SHOP } from '../config/shop';
 
 /* ── Greeting by time-of-day ────────────────────────────── */
-function getGreeting() {
+function getGreetingKey(): 'home.greeting.morning' | 'home.greeting.afternoon' | 'home.greeting.evening' {
   const h = new Date().getHours();
-  if (h < 12) return 'สวัสดีตอนเช้า';
-  if (h < 17) return 'สวัสดีตอนบ่าย';
-  return 'สวัสดีตอนเย็น';
+  if (h < 12) return 'home.greeting.morning';
+  if (h < 17) return 'home.greeting.afternoon';
+  return 'home.greeting.evening';
 }
 
-/* ── Bottom-sheet IDs ───────────────────────────────────── */
 type Sheet = 'delivery' | 'about' | 'social' | null;
 
-/* ── Reusable bottom-sheet wrapper ─────────────────────── */
 function BottomSheet({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
   return (
     <>
-      <div
-        onClick={onClose}
-        style={{
-          position: 'fixed', inset: 0,
-          background: 'rgba(43,33,24,0.52)',
-          zIndex: 50,
-        }}
-      />
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(43,33,24,0.52)', zIndex: 50 }} />
       <div style={{
-        position: 'fixed',
-        bottom: 0,
-        left: '50%', transform: 'translateX(-50%)',
-        width: '100%', maxWidth: 480,
-        background: 'var(--bg-2)',
+        position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)',
+        width: '100%', maxWidth: 480, background: 'var(--bg-2)',
         borderRadius: '20px 20px 0 0',
         paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 28px)',
-        zIndex: 51,
-        boxShadow: '0 -8px 40px -8px rgba(43,33,24,0.22)',
+        zIndex: 51, boxShadow: '0 -8px 40px -8px rgba(43,33,24,0.22)',
       }}>
         <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 12, paddingBottom: 4 }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--line-2)' }} />
@@ -50,63 +37,40 @@ function BottomSheet({ onClose, children }: { onClose: () => void; children: Rea
   );
 }
 
-/* ── Service button (floating circle) ──────────────────── */
-function ServiceBtn({
-  icon, label, sublabel, onClick,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  sublabel: string;
-  onClick: () => void;
+function ServiceBtn({ icon, label, sublabel, onClick }: {
+  icon: React.ReactNode; label: string; sublabel?: string; onClick: () => void;
 }) {
   return (
-    <button
-      onClick={onClick}
-      style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
-        background: 'none', border: 0, cursor: 'pointer', padding: '4px 0',
-        WebkitTapHighlightColor: 'transparent',
-      }}
-    >
+    <button onClick={onClick} style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+      background: 'none', border: 0, cursor: 'pointer', padding: '4px 0',
+      WebkitTapHighlightColor: 'transparent',
+    }}>
       <div style={{
         width: 64, height: 64, borderRadius: '50%',
-        background: 'var(--bg-2)',
-        border: '1px solid var(--line)',
-        display: 'grid', placeItems: 'center',
-        color: 'var(--accent)',
+        background: 'var(--bg-2)', border: '1px solid var(--line)',
+        display: 'grid', placeItems: 'center', color: 'var(--accent)',
         boxShadow: '0 2px 12px -4px rgba(43,33,24,0.14)',
-      }}>
-        {icon}
-      </div>
+      }}>{icon}</div>
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontFamily: 'var(--serif)', fontSize: 12.5, color: 'var(--ink)', lineHeight: 1.2 }}>
-          {label}
-        </div>
-        <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 1 }}>{sublabel}</div>
+        <div style={{ fontFamily: 'var(--serif)', fontSize: 12.5, color: 'var(--ink)', lineHeight: 1.2 }}>{label}</div>
+        {sublabel && <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 1 }}>{sublabel}</div>}
       </div>
     </button>
   );
 }
 
-/* ── Icon row button (small) ────────────────────────────── */
 function InfoBtn({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
   return (
-    <button
-      onClick={onClick}
-      style={{
-        flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
-        background: 'none', border: 0, cursor: 'pointer', padding: '4px 0',
-        WebkitTapHighlightColor: 'transparent',
-      }}
-    >
+    <button onClick={onClick} style={{
+      flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+      background: 'none', border: 0, cursor: 'pointer', padding: '4px 0',
+      WebkitTapHighlightColor: 'transparent',
+    }}>
       <div style={{
         width: 46, height: 46, borderRadius: '50%',
-        background: 'var(--bg-3)',
-        display: 'grid', placeItems: 'center',
-        color: 'var(--ink-2)',
-      }}>
-        {icon}
-      </div>
+        background: 'var(--bg-3)', display: 'grid', placeItems: 'center', color: 'var(--ink-2)',
+      }}>{icon}</div>
       <span style={{ fontSize: 11, color: 'var(--ink-2)', fontWeight: 500 }}>{label}</span>
     </button>
   );
@@ -117,10 +81,9 @@ function InfoBtn({ icon, label, onClick }: { icon: React.ReactNode; label: strin
 ══════════════════════════════════════════════════════════ */
 export default function Landing() {
   const navigate = useNavigate();
-  const { lang, setLang } = useLang();
+  const { t, lang, setLang } = useT();
 
   const [sheet, setSheet] = useState<Sheet>(null);
-  // hero: null = probing, true = visible, false = hidden
   const [heroVisible, setHeroVisible] = useState<boolean | null>(null);
 
   const deliveryLinks = (
@@ -147,7 +110,6 @@ export default function Landing() {
         padding: '16px 18px 14px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
-        {/* Logo + wordmark */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Brand size={34} />
           <div>
@@ -161,11 +123,14 @@ export default function Landing() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {/* Greeting */}
-          <span style={{ fontSize: 12, color: 'var(--ink-2)', fontFamily: 'var(--serif)' }}>
-            {getGreeting()}
-          </span>
-          {/* TH / EN toggle */}
+          <div style={{ textAlign: 'right' }}>
+            <span style={{ fontSize: 12, color: 'var(--ink-2)', fontFamily: 'var(--serif)', display: 'block' }}>
+              {t(getGreetingKey())}
+            </span>
+            <span style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: '0.06em', display: 'block', marginTop: 1 }}>
+              MADE FOR THE WAY YOU EAT.
+            </span>
+          </div>
           <div style={{
             display: 'inline-flex', alignItems: 'center', padding: 3,
             background: 'var(--bg-3)', borderRadius: 'var(--r-pill)',
@@ -198,14 +163,13 @@ export default function Landing() {
       {/* ── b) Service Selection ─────────────────────────── */}
       <div style={{ padding: '8px 18px 28px' }}>
         <div style={{ marginBottom: 18 }}>
-          <div className="h-display-th" style={{ fontSize: 22 }}>สั่งอาหาร</div>
-          <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 3 }}>เลือกวิธีรับที่ต้องการ</div>
+          <div className="h-display-th" style={{ fontSize: 22 }}>{t('home.order.title')}</div>
+          <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 3 }}>{t('home.order.subtitle')}</div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4 }}>
           <ServiceBtn
             icon={I.dinein(26)}
-            label="ทานที่ร้าน"
-            sublabel="Dine-in"
+            label={t('home.method.dine')}
             onClick={() => {
               sessionStorage.setItem('bp_method', 'dine');
               sessionStorage.setItem('bp_method_chosen', 'true');
@@ -214,8 +178,7 @@ export default function Landing() {
           />
           <ServiceBtn
             icon={I.bag(26)}
-            label="รับกลับบ้าน"
-            sublabel="Takeaway"
+            label={t('home.method.takeaway')}
             onClick={() => {
               sessionStorage.setItem('bp_method', 'takeaway');
               sessionStorage.setItem('bp_method_chosen', 'true');
@@ -224,8 +187,7 @@ export default function Landing() {
           />
           <ServiceBtn
             icon={I.car(26)}
-            label="เสิร์ฟถึงรถ"
-            sublabel="Curbside"
+            label={t('home.method.curbside')}
             onClick={() => {
               sessionStorage.setItem('bp_method', 'curbside');
               sessionStorage.setItem('bp_method_chosen', 'true');
@@ -235,8 +197,7 @@ export default function Landing() {
           {deliveryLinks.length > 0 && (
             <ServiceBtn
               icon={I.scooter(26)}
-              label="เดลิเวอรี่"
-              sublabel="Delivery"
+              label={t('home.method.delivery')}
               onClick={() => setSheet('delivery')}
             />
           )}
@@ -244,7 +205,6 @@ export default function Landing() {
       </div>
 
       {/* ── c) Hero banner ───────────────────────────────── */}
-      {/* Silent probe — only renders the section when image actually loads */}
       <img
         src="/hero.jpg"
         alt=""
@@ -270,46 +230,19 @@ export default function Landing() {
         borderBottom: '1px solid var(--line)',
         display: 'flex',
       }}>
-        <InfoBtn icon={I.info(20)} label="เกี่ยวกับเรา" onClick={() => setSheet('about')} />
+        <InfoBtn icon={I.info(20)} label={t('home.info.about')} onClick={() => setSheet('about')} />
         {LINKS.googleMaps && (
-          <InfoBtn icon={I.pin(20)} label="สาขา" onClick={() => window.open(LINKS.googleMaps!, '_blank')} />
+          <InfoBtn icon={I.pin(20)} label={t('home.info.branch')} onClick={() => window.open(LINKS.googleMaps!, '_blank')} />
         )}
         {socialLinks.length > 0 && (
-          <InfoBtn icon={I.share(20)} label="Social" onClick={() => setSheet('social')} />
+          <InfoBtn icon={I.share(20)} label={t('home.info.social')} onClick={() => setSheet('social')} />
         )}
         {LINKS.googleReview && (
-          <InfoBtn icon={I.star(20)} label="รีวิว" onClick={() => window.open(LINKS.googleReview!, '_blank')} />
+          <InfoBtn icon={I.star(20)} label={t('home.info.reviews')} onClick={() => window.open(LINKS.googleReview!, '_blank')} />
         )}
       </div>
 
-      {/* ── e) "กำลังพัฒนา" card ────────────────────────── */}
-      <div style={{
-        margin: '0 18px 28px',
-        padding: '16px 18px',
-        borderRadius: 'var(--r-md)',
-        border: '1.5px dashed var(--line-2)',
-        background: 'var(--bg-2)',
-      }}>
-        <div className="kicker" style={{ marginBottom: 10 }}>กำลังพัฒนา · COMING SOON</div>
-        <ul style={{
-          margin: '0 0 10px',
-          padding: '0 0 0 16px',
-          listStyle: 'disc',
-          color: 'var(--ink-2)',
-          fontSize: 13,
-          lineHeight: 1.8,
-          fontFamily: 'var(--serif)',
-        }}>
-          <li>จำเมนูโปรดและ note ของคุณ</li>
-          <li>สั่งซ้ำแตะเดียว</li>
-          <li>สิทธิพิเศษลูกค้าประจำ</li>
-        </ul>
-        <div style={{ fontSize: 11, color: 'var(--ink-3)', lineHeight: 1.65 }}>
-          เราเก็บเบอร์โทรและประวัติการสั่งเพื่อพัฒนาบริการนี้
-        </div>
-      </div>
-
-      {/* ── f) Footer ────────────────────────────────────── */}
+      {/* ── e) Footer ────────────────────────────────────── */}
       <div style={{ padding: '4px 18px 16px', textAlign: 'center' }}>
         <span style={{ fontSize: 11, color: 'var(--ink-3)', letterSpacing: '.06em' }}>
           BEST PART BOWLS · {SHOP.branchName}
@@ -323,8 +256,8 @@ export default function Landing() {
       {sheet === 'delivery' && (
         <BottomSheet onClose={() => setSheet(null)}>
           <div style={{ padding: '8px 18px 0' }}>
-            <div className="kicker" style={{ marginBottom: 4 }}>เดลิเวอรี่ · DELIVERY</div>
-            <div style={{ fontFamily: 'var(--serif)', fontSize: 18, marginBottom: 20 }}>เลือกแพลตฟอร์ม</div>
+            <div className="kicker" style={{ marginBottom: 4 }}>{t('home.sheet.delivery.kicker')}</div>
+            <div style={{ fontFamily: 'var(--serif)', fontSize: 18, marginBottom: 20 }}>{t('home.sheet.delivery.title')}</div>
             {deliveryLinks.map(p => (
               <a
                 key={p.name}
@@ -335,10 +268,8 @@ export default function Landing() {
                 style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   padding: '14px 16px', marginBottom: 8,
-                  borderRadius: 'var(--r-md)',
-                  border: '1px solid var(--line)',
-                  background: 'var(--bg)',
-                  textDecoration: 'none', color: 'var(--ink)',
+                  borderRadius: 'var(--r-md)', border: '1px solid var(--line)',
+                  background: 'var(--bg)', textDecoration: 'none', color: 'var(--ink)',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -355,12 +286,10 @@ export default function Landing() {
       {sheet === 'about' && (
         <BottomSheet onClose={() => setSheet(null)}>
           <div style={{ padding: '8px 18px 0' }}>
-            <div className="kicker" style={{ marginBottom: 4 }}>เกี่ยวกับเรา · ABOUT</div>
-            <div style={{ fontFamily: 'var(--serif)', fontSize: 18, marginBottom: 14 }}>Best Part Bowls</div>
+            <div className="kicker" style={{ marginBottom: 4 }}>{t('home.sheet.about.kicker')}</div>
+            <div style={{ fontFamily: 'var(--serif)', fontSize: 18, marginBottom: 14 }}>{t('home.sheet.about.title')}</div>
             <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.8 }}>
-              เราคือร้านอาหารไทยสไตล์โบลว์ เสิร์ฟเมนูจานเดี่ยวรสจัดจ้าน
-              ที่ปรุงสดทุกออเดอร์ ส่วนผสมคัดเองทุกวัน
-              {SHOP.branchName} เปิดทุกวัน 11:00–22:00
+              {t('home.sheet.about.body', SHOP.branchName)}
             </div>
           </div>
         </BottomSheet>
@@ -369,8 +298,8 @@ export default function Landing() {
       {sheet === 'social' && (
         <BottomSheet onClose={() => setSheet(null)}>
           <div style={{ padding: '8px 18px 0' }}>
-            <div className="kicker" style={{ marginBottom: 4 }}>ติดตามเรา · FOLLOW US</div>
-            <div style={{ fontFamily: 'var(--serif)', fontSize: 18, marginBottom: 20 }}>Social Media</div>
+            <div className="kicker" style={{ marginBottom: 4 }}>{t('home.sheet.social.kicker')}</div>
+            <div style={{ fontFamily: 'var(--serif)', fontSize: 18, marginBottom: 20 }}>{t('home.sheet.social.title')}</div>
             {socialLinks.map(s => (
               <a
                 key={s.name}
@@ -381,10 +310,8 @@ export default function Landing() {
                 style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   padding: '14px 16px', marginBottom: 8,
-                  borderRadius: 'var(--r-md)',
-                  border: '1px solid var(--line)',
-                  background: 'var(--bg)',
-                  textDecoration: 'none', color: 'var(--ink)',
+                  borderRadius: 'var(--r-md)', border: '1px solid var(--line)',
+                  background: 'var(--bg)', textDecoration: 'none', color: 'var(--ink)',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

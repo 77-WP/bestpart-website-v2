@@ -3,12 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { getLocalOrderIds } from '../lib/localOrders';
 import { I } from './icons';
+import { useT } from '../i18n';
 
-type TabId = 'home' | 'menu' | 'orders' | 'me'; // 'me' accepted for legacy, treated as 'orders'
+type TabId = 'home' | 'menu' | 'orders' | 'me';
 
 const ACTIVE_STATUSES = ['awaiting_payment', 'pending', 'preparing'];
 
-/** Lightweight hook — checks localStorage ids against DB once on mount. */
 function useHasActiveOrders(override?: boolean): boolean {
   const [hasActive, setHasActive] = useState(override ?? false);
 
@@ -30,6 +30,7 @@ function useHasActiveOrders(override?: boolean): boolean {
 
 export function TabBar({ active, hasActiveOrder }: { active: TabId; hasActiveOrder?: boolean }) {
   const navigate = useNavigate();
+  const { t } = useT();
   const hasActive = useHasActiveOrders(hasActiveOrder);
 
   const eff = active === 'me' ? 'orders' : active;
@@ -60,7 +61,6 @@ export function TabBar({ active, hasActiveOrder }: { active: TabId; hasActiveOrd
   };
 
   return (
-    /* Outer wrapper — floating position */
     <div style={{
       position: 'fixed',
       left: '50%',
@@ -69,7 +69,7 @@ export function TabBar({ active, hasActiveOrder }: { active: TabId; hasActiveOrd
       width: 'calc(100% - 32px)',
       maxWidth: 448,
       zIndex: 40,
-      height: 72,          /* pill (60) + raised button overflow (12) */
+      height: 72,
       pointerEvents: 'none',
     }}>
 
@@ -86,22 +86,21 @@ export function TabBar({ active, hasActiveOrder }: { active: TabId; hasActiveOrd
         overflow: 'hidden',
         pointerEvents: 'all',
       }}>
-        {/* Left — หน้าแรก */}
+        {/* Left — หน้าแรก / Home */}
         <button onClick={() => navigate('/')} style={sideBtn(eff === 'home')}>
           {I.home(20)}
-          <span style={labelStyle}>หน้าแรก</span>
+          <span style={labelStyle}>{t('nav.home')}</span>
         </button>
 
-        {/* Center spacer — room for raised button */}
+        {/* Center spacer */}
         <div style={{ width: 72, flexShrink: 0 }} />
 
-        {/* Right — ออเดอร์ */}
+        {/* Right — ออเดอร์ / Orders */}
         <button
           onClick={() => navigate('/orders')}
           style={{ ...sideBtn(eff === 'orders'), position: 'relative' }}
         >
           {I.receipt(20)}
-          {/* Badge dot — shown when there is an active order on this device */}
           {hasActive && (
             <span style={{
               position: 'absolute',
@@ -113,11 +112,11 @@ export function TabBar({ active, hasActiveOrder }: { active: TabId; hasActiveOrd
               border: '1.5px solid var(--ink)',
             }} />
           )}
-          <span style={labelStyle}>ออเดอร์</span>
+          <span style={labelStyle}>{t('nav.orders')}</span>
         </button>
       </div>
 
-      {/* ── Center raised button — เมนู ─────────────────── */}
+      {/* ── Center raised button — เมนู / Menu ──────────── */}
       <button
         onClick={() => navigate('/order')}
         style={{
@@ -131,15 +130,27 @@ export function TabBar({ active, hasActiveOrder }: { active: TabId; hasActiveOrd
           background: eff === 'menu' ? '#c4601f' : 'var(--accent)',
           border: '4px solid var(--bg)',
           color: '#FFFDF8',
-          display: 'grid',
-          placeItems: 'center',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 1,
           boxShadow: '0 4px 20px rgba(181,81,30,0.55)',
           cursor: 'pointer',
           pointerEvents: 'all',
           transition: 'background 0.15s',
         }}
       >
-        {I.dinein(22)}
+        {I.dinein(18)}
+        <span style={{
+          fontSize: 8,
+          fontWeight: 700,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          fontFamily: 'var(--sans)',
+          lineHeight: 1,
+          color: '#FFFDF8',
+        }}>{t('nav.menu')}</span>
       </button>
     </div>
   );

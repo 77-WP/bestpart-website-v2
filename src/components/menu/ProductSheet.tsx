@@ -5,8 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { Bowl } from '../Bowl';
 import { I } from '../icons';
 import { useCart, type CartItem } from '../../store/cart';
-import { useLang } from '../../store/lang';
-import { LANG_MAP } from '../../config/lang';
+import { useT } from '../../i18n';
 import { PERSONALIZATION } from '../../config/personalization';
 import { TEST_MODE } from '../../config/env';
 
@@ -71,8 +70,7 @@ type Props = {
 export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
   const { add, replace, items } = useCart();
-  const { lang }       = useLang();
-  const T              = LANG_MAP[lang];
+  const { t, lang }    = useT();
   const prefersReduced = useReducedMotion();
 
   const itemId    = searchParams.get('item');
@@ -469,7 +467,7 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
                   color: 'var(--ink-2)',
                   borderBottom: '1px solid var(--line)',
                 }}>
-                  <strong style={{ color: 'var(--ink)' }}>{T.closedBanner(shopNextOpen)}</strong>
+                  <strong style={{ color: 'var(--ink)' }}>{t('detail.closedBanner', shopNextOpen)}</strong>
                 </div>
               )}
 
@@ -513,7 +511,7 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
                   <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--ink-3)' }}>
                     <div style={{ opacity: 0.3, marginBottom: 12 }}>{I.close(40)}</div>
                     <div style={{ fontFamily: 'var(--serif)', fontSize: 18, color: 'var(--ink-2)', marginBottom: 10 }}>
-                      {T.notAvailable}
+                      {t('detail.notAvailable')}
                     </div>
                     <button
                       onClick={close}
@@ -522,7 +520,7 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
                         padding: '11px 22px', borderRadius: 'var(--r-pill)',
                         fontSize: 13, color: 'var(--ink-2)',
                       }}
-                    >{T.backToMenu}</button>
+                    >{t('detail.backToMenu')}</button>
                   </div>
                 )}
 
@@ -555,8 +553,8 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
                       const isSize  = isSizeGroup(g);
                       const selectedIds = selections[g.id] ?? [];
 
-                      const labelTh = isSize ? T.size : isSpice ? T.spiceLevel : cleanLabel(g.group_name_th);
-                      const labelEn = isSize ? T.size : isSpice ? T.spiceLevel : (cleanLabel(g.group_name_en) || labelTh);
+                      const labelTh = isSize ? t('detail.size') : isSpice ? t('detail.spiceLevel') : cleanLabel(g.group_name_th);
+                      const labelEn = isSize ? t('detail.size') : isSpice ? t('detail.spiceLevel') : (cleanLabel(g.group_name_en) || labelTh);
                       const groupLabel = lang === 'en' ? labelEn : labelTh;
 
                       /* Size: sort price=0 first, then ascending */
@@ -585,7 +583,7 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
                                 {selSpiceDisplay}
                               </span>
                             ) : (
-                              <span style={{ fontSize: 10, color: 'var(--ink-3)' }}>{T.required}</span>
+                              <span style={{ fontSize: 10, color: 'var(--ink-3)' }}>{t('detail.required')}</span>
                             )}
                           </div>
 
@@ -696,19 +694,19 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
                   <span style={{
                     display: 'block', fontSize: 10, fontWeight: 700, letterSpacing: '.12em',
                     color: 'var(--gold)', marginBottom: 8,
-                  }}>{T.kicker}</span>
+                  }}>{t('detail.kicker')}</span>
 
                   <div style={{
                     fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 500, lineHeight: 1.2,
                     color: 'var(--ink)', marginBottom: 12,
-                  }}>{T.headline}</div>
+                  }}>{t('detail.headline')}</div>
 
                   <div style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.75 }}>
-                    {T.philoP1}
+                    {t('detail.philoP1')}
                   </div>
                   <div style={{ height: 10 }} />
                   <em style={{ display: 'block', fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.7 }}>
-                    {T.philoClose}
+                    {t('detail.philoClose')}
                   </em>
                 </div>
 
@@ -716,9 +714,9 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
                 {eggOptions.length > 0 && (
                   <div style={{ marginBottom: 28 }}>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
-                      <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{T.eggTitle}</span>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{t('detail.eggTitle')}</span>
                       {eggAllFree && (
-                        <span style={{ fontSize: 10, color: 'var(--ink-3)' }}>{T.noExtraCharge}</span>
+                        <span style={{ fontSize: 10, color: 'var(--ink-3)' }}>{t('detail.noExtraCharge')}</span>
                       )}
                     </div>
 
@@ -805,9 +803,9 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
                 {tasteOptions.length > 0 && (
                   <div style={{ marginBottom: 28 }}>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
-                      <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{T.tasteTitle}</span>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{t('detail.tasteTitle')}</span>
                       {tasteAllFree && (
-                        <span style={{ fontSize: 10, color: 'var(--ink-3)' }}>{T.noExtraCharge}</span>
+                        <span style={{ fontSize: 10, color: 'var(--ink-3)' }}>{t('detail.noExtraCharge')}</span>
                       )}
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -853,7 +851,7 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
                     <div style={{
                       fontSize: 11, fontWeight: 600,
                       color: 'var(--ink-3)', marginBottom: 12,
-                    }}>{T.extrasTitle}</div>
+                    }}>{t('detail.extrasTitle')}</div>
                     <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
                       {extrasGroups.flatMap(g =>
                         g.options.map(opt => {
@@ -895,12 +893,12 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
                   <div style={{ marginTop: 32 }}>
                     <div style={{ height: 1, background: 'var(--line)', marginBottom: 14 }} />
                     <div style={{ fontSize: 11, color: 'var(--ink-3)', fontWeight: 600, marginBottom: 8 }}>
-                      {T.summaryReady}
+                      {t('detail.summaryReady')}
                     </div>
                     <div style={{
                       fontSize: 9, fontWeight: 700, letterSpacing: '.12em',
                       color: 'var(--ink-3)', marginBottom: 6,
-                    }}>{T.summaryTitle}</div>
+                    }}>{t('detail.summaryTitle')}</div>
                     <div style={{ fontFamily: 'var(--serif)', fontSize: 15, color: 'var(--ink)', marginBottom: 4 }}>
                       {lang === 'en' ? item.name_en : item.name_th}
                     </div>
@@ -915,7 +913,7 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
                       </div>
                     )}
                     <em style={{ display: 'block', fontSize: 12, color: 'var(--ink-3)' }}>
-                      {hasAnyPersonSelection ? T.summaryTaglineCustom : T.summaryTaglineDefault}
+                      {hasAnyPersonSelection ? t('detail.summaryTaglineCustom') : t('detail.summaryTaglineDefault')}
                     </em>
                   </div>
                 )}
@@ -954,11 +952,11 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
                   }}
                 >
                   <span style={{ fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {T.nextBtn} {I.arrow(13)}
+                    {t('detail.nextBtn')} {I.arrow(13)}
                   </span>
-                  {lang === 'th' && T.nextBtnSub && (
+                  {lang === 'th' && t('detail.nextBtnSub') && (
                     <span style={{ fontSize: 10, opacity: 0.5, fontWeight: 400 }}>
-                      {T.nextBtnSub}
+                      {t('detail.nextBtnSub')}
                     </span>
                   )}
                 </motion.button>
@@ -1003,7 +1001,7 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
                       border: isShopOpen ? 'none' : '1px solid var(--line)',
                       fontSize: 13, fontWeight: 600,
                     }}
-                  >{T.addToCart(total)}</motion.button>
+                  >{t('detail.addToCart', total)}</motion.button>
                 </div>
 
                 {/* Closed tap message */}
@@ -1012,7 +1010,7 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
                     marginTop: 8, textAlign: 'center',
                     fontSize: 12, color: 'var(--ink-3)',
                   }}>
-                    {T.closedAddMsg(shopNextOpen)}
+                    {t('detail.closedAddMsg', shopNextOpen)}
                   </div>
                 )}
               </>

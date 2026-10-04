@@ -6,8 +6,7 @@ import { Bowl } from '../components/Bowl';
 import { TabBar } from '../components/TabBar';
 import { I } from '../components/icons';
 import { ProductSheet } from '../components/menu/ProductSheet';
-import { useLang } from '../store/lang';
-import { LANG_MAP } from '../config/lang';
+import { useT } from '../i18n';
 import { supabase } from '../lib/supabase';
 import { computeSlots } from '../config/shop';
 import { TEST_MODE } from '../config/env';
@@ -51,8 +50,7 @@ export default function Cart() {
   const navigate       = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const prefersReduced = useReducedMotion();
-  const { lang }       = useLang();
-  const T              = LANG_MAP[lang];
+  const { t, lang }    = useT();
 
   const {
     items, remove, setQty, clear, add,
@@ -154,8 +152,8 @@ export default function Cart() {
             {I.back(22)}
           </button>
           <div style={{ flex: 1 }}>
-            <div className="kicker">ตะกร้า · YOUR BAG</div>
-            <div style={{ fontFamily: 'var(--serif)', fontSize: 16, marginTop: 1 }}>ว่างอยู่</div>
+            <div className="kicker">{t('cart.header')}</div>
+            <div style={{ fontFamily: 'var(--serif)', fontSize: 16, marginTop: 1 }}>{t('cart.header.emptySub')}</div>
           </div>
         </div>
         <div style={{
@@ -163,8 +161,8 @@ export default function Cart() {
           minHeight: '60vh', gap: 12, textAlign: 'center', padding: '0 32px',
         }}>
           <div style={{ fontSize: 40, opacity: 0.25, color: 'var(--ink-3)' }}>{I.bag(40)}</div>
-          <div className="h-display-th" style={{ fontSize: 18, color: 'var(--ink-2)' }}>ตะกร้าว่าง</div>
-          <div style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.6 }}>{T.cartEmptyMsg}</div>
+          <div className="h-display-th" style={{ fontSize: 18, color: 'var(--ink-2)' }}>{t('cart.header.emptyTitle')}</div>
+          <div style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.6 }}>{t('cart.emptyMsg')}</div>
           <button
             onClick={() => navigate('/order')}
             style={{
@@ -172,7 +170,7 @@ export default function Cart() {
               border: 0, padding: '12px 24px', borderRadius: 'var(--r-pill)',
               fontWeight: 600, fontSize: 13,
             }}
-          >{T.cartEmptyBtn} {I.arrow(14)}</button>
+          >{t('cart.emptyBtn')} {I.arrow(14)}</button>
         </div>
         <TabBar active="menu" />
       </div>
@@ -201,15 +199,15 @@ export default function Cart() {
           {I.back(22)}
         </button>
         <div style={{ flex: 1 }}>
-          <div className="kicker">ตะกร้า · YOUR BAG</div>
+          <div className="kicker">{t('cart.header')}</div>
           <div style={{ fontFamily: 'var(--serif)', fontSize: 16, marginTop: 1 }}>
-            {T.cartItems(items.reduce((s, i) => s + i.qty, 0))}
+            {t('cart.items', items.reduce((s, i) => s + i.qty, 0))}
           </div>
         </div>
         <button
           onClick={() => setShowClearConfirm(true)}
           style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600, background: 'none', border: 0, padding: 0 }}
-        >{T.clearAll}</button>
+        >{t('cart.clearAll')}</button>
       </motion.div>
 
       {/* ── 1. Cart lines ────────────────────────────────────── */}
@@ -290,7 +288,7 @@ export default function Cart() {
                       minHeight: 28,
                     }}
                   >
-                    {I.pencil(11)} {T.editLabel}
+                    {I.pencil(11)} {t('cart.editLabel')}
                   </button>
                 )}
               </div>
@@ -315,11 +313,11 @@ export default function Cart() {
               fontSize: 12, color: 'var(--ink-2)',
             }}
           >
-            <span>{T.removedMsg}</span>
+            <span>{t('cart.removedMsg')}</span>
             <button
               onClick={handleUndo}
               style={{ background: 'none', border: 0, padding: 0, fontSize: 12, fontWeight: 600, color: 'var(--accent)', cursor: 'pointer' }}
-            >{T.undoLabel}</button>
+            >{t('cart.undoLabel')}</button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -334,7 +332,7 @@ export default function Cart() {
         >
           <div style={{ padding: '0 18px', marginBottom: 8 }}>
             <div style={{ fontSize: 10, letterSpacing: '.06em', color: 'var(--ink-3)', textTransform: 'uppercase' }}>
-              {T.drinksSection}
+              {t('cart.drinksSection')}
             </div>
           </div>
 
@@ -415,7 +413,7 @@ export default function Cart() {
           style={{ margin: '20px 18px 0', paddingTop: 14, borderTop: '1px solid var(--line)' }}
         >
           <div style={{ fontSize: 10, letterSpacing: '.05em', color: 'var(--ink-3)', marginBottom: 10 }}>
-            {T.cutlerySection}
+            {t('cart.cutlerySection')}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             {/* Cutlery chip */}
@@ -432,7 +430,7 @@ export default function Cart() {
             >
               {cutlery && <span style={{ color: 'var(--on-accent)' }}>{I.check(11)}</span>}
               <span style={{ color: cutlery ? 'var(--on-accent)' : 'var(--ink-3)' }}>{I.fork(13)}</span>
-              <span>{T.cutleryChip}</span>
+              <span>{t('cart.cutleryChip')}</span>
             </button>
 
             {/* Condiments chip */}
@@ -449,7 +447,7 @@ export default function Cart() {
             >
               {condiments && <span style={{ color: 'var(--on-accent)' }}>{I.check(11)}</span>}
               <span style={{ color: condiments ? 'var(--on-accent)' : 'var(--ink-3)' }}>{I.sauce(13)}</span>
-              <span>{T.condimentsChip}</span>
+              <span>{t('cart.condimentsChip')}</span>
             </button>
           </div>
           {/* TODO(session3): send cutlery/condiments to orders INSERT */}
@@ -464,7 +462,7 @@ export default function Cart() {
         style={{ margin: '16px 18px 0', paddingTop: 14, borderTop: '1px solid var(--line)' }}
       >
         <div style={{ fontSize: 10, letterSpacing: '.05em', color: 'var(--ink-3)', marginBottom: 8 }}>
-          {T.kitchenNoteTitle}
+          {t('cart.kitchenNoteTitle')}
         </div>
 
         {noteExpanded ? (
@@ -475,7 +473,7 @@ export default function Cart() {
               value={kitchenNote}
               onChange={e => handleNoteChange(e.target.value)}
               onBlur={() => { if (!kitchenNote.trim()) { setNoteExpanded(false); } }}
-              placeholder={T.kitchenNotePlaceholder}
+              placeholder={t('cart.kitchenNotePlaceholder')}
               maxLength={200}
               rows={2}
               style={{
@@ -504,7 +502,7 @@ export default function Cart() {
             }}
           >
             <span style={{ color: 'var(--ink-3)', flexShrink: 0 }}>{I.notepad(14)}</span>
-            <span style={{ fontSize: 13, color: 'var(--ink-3)' }}>{T.kitchenNotePlaceholder}</span>
+            <span style={{ fontSize: 13, color: 'var(--ink-3)' }}>{t('cart.kitchenNotePlaceholder')}</span>
           </button>
         )}
         {/* TODO(session3/4): trim and escape kitchen note before sending to DB/Telegram */}
@@ -514,7 +512,7 @@ export default function Cart() {
       <div style={{ padding: '20px 18px 0' }}>
         <div style={{ height: 1, background: 'var(--line)', marginBottom: 12 }} />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-          <span style={{ fontFamily: 'var(--serif)', fontSize: 14 }}>{T.totalLabel}</span>
+          <span style={{ fontFamily: 'var(--serif)', fontSize: 14 }}>{t('cart.totalLabel')}</span>
           <span className="thb price" style={{ fontSize: 24 }}>{total}</span>
         </div>
       </div>
@@ -535,11 +533,8 @@ export default function Cart() {
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}
         >
-          <span>{lang === 'th' ? 'ไปต่อ' : 'Continue'}</span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span className="thb" style={{ fontFamily: 'var(--mono)', fontSize: 16 }}>{total}</span>
-            {I.arrow(14)}
-          </span>
+          <span>{t('cart.continueBtn', total)}</span>
+          <span>{I.arrow(14)}</span>
         </button>
       </div>
 
@@ -566,17 +561,17 @@ export default function Cart() {
                 padding: '24px 20px calc(env(safe-area-inset-bottom, 0px) + 32px)',
               }}
             >
-              <div style={{ fontFamily: 'var(--serif)', fontSize: 18, marginBottom: 6 }}>{T.clearConfirmTitle}</div>
-              <div style={{ fontSize: 13, color: 'var(--ink-2)', marginBottom: 24 }}>{T.clearConfirmMsg}</div>
+              <div style={{ fontFamily: 'var(--serif)', fontSize: 18, marginBottom: 6 }}>{t('cart.clearConfirmTitle')}</div>
+              <div style={{ fontSize: 13, color: 'var(--ink-2)', marginBottom: 24 }}>{t('cart.clearConfirmMsg')}</div>
               <div style={{ display: 'flex', gap: 10 }}>
                 <button
                   onClick={() => setShowClearConfirm(false)}
                   style={{ flex: 1, padding: '13px 0', borderRadius: 'var(--r-pill)', background: 'var(--bg-3)', border: '1px solid var(--line)', fontSize: 13, fontWeight: 600, color: 'var(--ink-2)', cursor: 'pointer' }}
-                >{T.clearConfirmCancel}</button>
+                >{t('cart.clearConfirmCancel')}</button>
                 <button
                   onClick={() => { clear(); setShowClearConfirm(false); setUndoItem(null); }}
                   style={{ flex: 1, padding: '13px 0', borderRadius: 'var(--r-pill)', background: 'var(--accent)', border: 'none', fontSize: 13, fontWeight: 600, color: '#fff', cursor: 'pointer' }}
-                >{T.clearConfirmOk}</button>
+                >{t('cart.clearConfirmOk')}</button>
               </div>
             </motion.div>
           </>

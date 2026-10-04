@@ -10,6 +10,7 @@ import { SHOP, computeSlots, shopCloseLabel } from '../config/shop';
 import { TEST_MODE } from '../config/env';
 import { ProductSheet } from '../components/menu/ProductSheet';
 import { FEATURED_KEYWORD } from '../config/featured';
+import { useT } from '../i18n';
 
 /* ── Types ───────────────────────────────────────────────── */
 type Category = {
@@ -29,9 +30,9 @@ const TEST_ITEM: MenuItem = {
 };
 
 const METHODS = [
-  { id: 'dine-in',  label: 'ทานที่ร้าน' },
-  { id: 'takeaway', label: 'รับกลับบ้าน' },
-  { id: 'curbside', label: 'เสิร์ฟถึงรถ' },
+  { id: 'dine-in',  labelKey: 'menu.method.dine' as const },
+  { id: 'takeaway', labelKey: 'menu.method.takeaway' as const },
+  { id: 'curbside', labelKey: 'menu.method.curbside' as const },
 ];
 
 const BEST_CAT_ID = '__best__';
@@ -72,6 +73,7 @@ export default function Order() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const prefersReduced = useReducedMotion();
+  const { t } = useT();
 
   const method = searchParams.get('method') ?? 'dine-in';
   const itemId = searchParams.get('item');
@@ -117,7 +119,7 @@ export default function Order() {
             message: catErr?.message, code: catErr?.code,
             details: catErr?.details, hint: catErr?.hint,
           });
-          setFetchError('โหลดเมนูไม่สำเร็จ');
+          setFetchError(t('menu.error.load'));
           setLoadingCats(false);
           return;
         }
@@ -139,7 +141,7 @@ export default function Order() {
                 message: itemErr?.message, code: itemErr?.code,
                 details: itemErr?.details, hint: itemErr?.hint,
               });
-              setFetchError('โหลดเมนูไม่สำเร็จ');
+              setFetchError(t('menu.error.load'));
               setLoadingItems(false);
               return;
             }
@@ -276,8 +278,8 @@ export default function Order() {
             fontSize: 12, color: 'var(--ink-2)',
             display: 'flex', alignItems: 'center', gap: 6,
           }}>
-            <span style={{ fontWeight: 700, color: 'var(--ink)' }}>ร้านปิดอยู่</span>
-            <span>· เปิด {shopInfo.nextOpenMsg} · ดูเมนูได้</span>
+            <span style={{ fontWeight: 700, color: 'var(--ink)' }}>{t('menu.status.closed', shopInfo.nextOpenMsg)}</span>
+            <span>{t('menu.header.closed.browse')}</span>
           </div>
         )}
         <div style={{ padding: '10px 18px', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -299,7 +301,7 @@ export default function Order() {
                 color: shopInfo.isOpen ? 'var(--accent-2)' : 'var(--ink-3)',
               }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: shopInfo.isOpen ? 'var(--accent-2)' : 'var(--ink-3)' }} />
-                {shopInfo.isOpen ? `เปิด · ถึง ${shopCloseLabel()}` : `ปิด · เปิด ${shopInfo.nextOpenMsg}`}
+                {shopInfo.isOpen ? t('menu.status.open', shopCloseLabel()) : t('menu.status.closed', shopInfo.nextOpenMsg)}
               </span>
               <button
                 onClick={cycleMethod}
@@ -312,7 +314,7 @@ export default function Order() {
                   color: 'var(--accent)',
                 }}
               >
-                {METHODS.find(m => m.id === method)?.label ?? 'ทานที่ร้าน'}
+                {t(METHODS.find(m => m.id === method)?.labelKey ?? 'menu.method.dine')}
                 {I.arrow(9)}
               </button>
             </div>
@@ -332,7 +334,7 @@ export default function Order() {
                 border: 0, padding: '13px 28px', borderRadius: 'var(--r-pill)',
                 fontSize: 13, fontWeight: 600,
               }}
-            >ลองใหม่</button>
+            >{t('menu.error.retry')}</button>
           </div>
         </div>
       )}

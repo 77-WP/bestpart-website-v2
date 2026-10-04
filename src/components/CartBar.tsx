@@ -1,17 +1,18 @@
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCart, cartTotal } from '../store/cart';
 import { I } from './icons';
+import { useT } from '../i18n';
 
 export function CartBar() {
   const { items } = useCart();
   const navigate = useNavigate();
+  const { t } = useT();
   const [searchParams] = useSearchParams();
   const count = items.reduce((s, i) => s + i.qty, 0);
   const total = cartTotal(items);
 
   if (count === 0) return null;
 
-  /* Preserve the current ?method= param so Cart can read it for cutlery visibility */
   const method = searchParams.get('method');
   const cartPath = method ? `/cart?method=${method}` : '/cart';
 
@@ -26,7 +27,7 @@ export function CartBar() {
       }}>{count}</span>
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: 11, opacity: 0.7, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>
-          ตะกร้าของคุณ · {count} รายการ
+          {t('cart.bar.summary', count)}
         </div>
         <div style={{ fontFamily: 'var(--mono)', fontSize: 17 }}>฿{total}</div>
       </div>
@@ -36,7 +37,7 @@ export function CartBar() {
         fontWeight: 600, fontSize: 13, letterSpacing: '0.04em',
         display: 'flex', gap: 6, alignItems: 'center',
       }}>
-        ดูตะกร้า {I.arrow(12)}
+        {t('cart.bar.viewBtn')} {I.arrow(12)}
       </button>
     </div>
   );

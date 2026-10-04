@@ -1,8 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { useLang } from '../store/lang';
-import { LANG_MAP } from '../config/lang';
+import { useT } from '../i18n';
 import { I } from '../components/icons';
 import { TEST_MODE } from '../config/env';
 
@@ -38,8 +37,7 @@ function isIOS(): boolean {
 export default function Pay() {
   const { orderId } = useParams<{ orderId: string }>();
   const navigate    = useNavigate();
-  const { lang }    = useLang();
-  const L           = LANG_MAP[lang];
+  const { t }       = useT();
 
   const [state, setState]         = useState<QrState>({ phase: 'loading' });
   const [orderNum, setOrderNum]   = useState<number | null>(null);
@@ -264,7 +262,7 @@ export default function Pay() {
           onClick={() => navigate('/')}
           style={{ background: 'none', border: 0, padding: 0, color: 'var(--ink)' }}
         >{I.back(22)}</button>
-        <div style={{ fontFamily: 'var(--serif)', fontSize: 16 }}>{L.payTitle}</div>
+        <div style={{ fontFamily: 'var(--serif)', fontSize: 16 }}>{t('pay.title')}</div>
       </div>
 
       {/* Loading skeleton */}
@@ -288,7 +286,7 @@ export default function Pay() {
           </div>
           {orderNumStr && (
             <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4 }}>
-              {L.payOrderLabel(orderNumStr)}
+              {t('pay.orderLabel', orderNumStr)}
             </div>
           )}
 
@@ -326,10 +324,10 @@ export default function Pay() {
           >
             {saveStatus === 'saved' ? I.check(16) : I.download(16)}
             {saveStatus === 'saving'
-              ? L.saveQrSaving
+              ? t('pay.saveQrSaving')
               : saveStatus === 'saved'
-                ? L.saveQrDone
-                : L.saveQrBtn}
+                ? t('pay.saveQrDone')
+                : t('pay.saveQrBtn')}
           </button>
 
           {/* Countdown */}
@@ -345,7 +343,7 @@ export default function Pay() {
           }}>
             <span style={{ color: nearExpiry ? 'var(--accent)' : 'var(--ink-3)' }}>{I.clock(14)}</span>
             <span style={{ fontFamily: 'var(--mono)' }}>
-              {L.countdownLabel(
+              {t('pay.countdownLabel',
                 String(displayMins).padStart(2, '0'),
                 String(displaySecs).padStart(2, '0')
               )}
@@ -358,9 +356,9 @@ export default function Pay() {
             display: 'flex', justifyContent: 'space-around', alignItems: 'flex-start',
           }}>
             {[
-              { icon: I.download(20), label: L.stepSave },
-              { icon: I.smartphone(20), label: L.stepOpenApp },
-              { icon: I.qr(20), label: L.stepScanPhoto },
+              { icon: I.download(20), label: t('pay.stepSave') },
+              { icon: I.smartphone(20), label: t('pay.stepOpenApp') },
+              { icon: I.qr(20), label: t('pay.stepScanPhoto') },
             ].map((step, i) => (
               <div key={i} style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
@@ -385,7 +383,7 @@ export default function Pay() {
               flexShrink: 0,
               animation: 'bp-pulse 1.8s ease-in-out infinite',
             }} />
-            {L.waitingMsg}
+            {t('pay.waitingMsg')}
           </div>
         </div>
       )}
@@ -397,8 +395,8 @@ export default function Pay() {
           padding: '48px 24px', gap: 12, textAlign: 'center',
         }}>
           <div style={{ color: 'var(--ink-3)', opacity: 0.5 }}>{I.clock(48)}</div>
-          <div style={{ fontFamily: 'var(--serif)', fontSize: 20 }}>{L.expiredTitle}</div>
-          <div style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.6 }}>{L.expiredSub}</div>
+          <div style={{ fontFamily: 'var(--serif)', fontSize: 20 }}>{t('pay.expiredTitle')}</div>
+          <div style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.6 }}>{t('pay.expiredSub')}</div>
           <button
             onClick={fetchQr}
             style={{
@@ -407,7 +405,7 @@ export default function Pay() {
               fontWeight: 600, fontSize: 13, letterSpacing: '.04em', cursor: 'pointer',
             }}
           >
-            {L.expiredBtn}
+            {t('pay.expiredBtn')}
           </button>
         </div>
       )}
@@ -419,7 +417,7 @@ export default function Pay() {
           padding: '48px 24px', gap: 12, textAlign: 'center',
         }}>
           <div style={{ color: 'var(--ink-3)', opacity: 0.5 }}>{I.receipt(48)}</div>
-          <div style={{ fontFamily: 'var(--serif)', fontSize: 20 }}>เกิดข้อผิดพลาด</div>
+          <div style={{ fontFamily: 'var(--serif)', fontSize: 20 }}>{t('pay.errorTitle')}</div>
           <div style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.6 }}>{state.message}</div>
           <button
             onClick={fetchQr}
@@ -429,7 +427,7 @@ export default function Pay() {
               fontWeight: 600, fontSize: 13, cursor: 'pointer',
             }}
           >
-            {L.retryBtn}
+            {t('pay.retryBtn')}
           </button>
         </div>
       )}
@@ -463,7 +461,7 @@ export default function Pay() {
           <div style={{
             fontSize: 13, color: '#fffdf8', textAlign: 'center', lineHeight: 1.6,
           }}>
-            {L.saveQrOverlayHint}
+            {t('pay.saveQrOverlayHint')}
           </div>
           <button
             onClick={() => setShowQrOverlay(false)}
@@ -474,7 +472,7 @@ export default function Pay() {
               fontWeight: 600, fontSize: 13, cursor: 'pointer',
             }}
           >
-            ปิด
+            {t('pay.closeOverlay')}
           </button>
         </div>
       )}

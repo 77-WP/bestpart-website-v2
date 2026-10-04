@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart, cartTotal, itemTotal } from '../store/cart';
-import { useLang } from '../store/lang';
-import { LANG_MAP } from '../config/lang';
+import { useT } from '../i18n';
 import { supabase } from '../lib/supabase';
 import { I } from '../components/icons';
 import { SHOP, shopCloseLabel, computeSlots, roundUp5, minToHHMM, type ShopInfo } from '../config/shop';
@@ -12,9 +11,9 @@ import { saveLocalOrder } from '../lib/localOrders';
 
 /* ── Constants ───────────────────────────────────────────── */
 const METHODS = [
-  { id: 'dine',     key: 'methodDine'     as const },
-  { id: 'takeaway', key: 'methodTakeaway' as const },
-  { id: 'curbside', key: 'methodCurbside' as const },
+  { id: 'dine',     labelKey: 'checkout.methodDine'     as const },
+  { id: 'takeaway', labelKey: 'checkout.methodTakeaway' as const },
+  { id: 'curbside', labelKey: 'checkout.methodCurbside' as const },
 ];
 
 const FULFILLMENT_MAP: Record<string, string> = {
@@ -27,12 +26,12 @@ const CONTACT_KEY = 'bp_contact';
 const VEHICLE_KEY = 'bp_vehicle';
 
 const VEHICLE_COLORS: { id: string; bg: string; border?: string; labelKey: string }[] = [
-  { id: 'white',  bg: '#FFFFFF', border: '#D0C8BC', labelKey: 'colorWhite'  },
-  { id: 'black',  bg: '#1A1A1A',                    labelKey: 'colorBlack'  },
-  { id: 'gray',   bg: '#9E9E9E',                    labelKey: 'colorGray'   },
-  { id: 'red',    bg: '#C0392B',                    labelKey: 'colorRed'    },
-  { id: 'blue',   bg: '#2255A4',                    labelKey: 'colorBlue'   },
-  { id: 'other',  bg: 'linear-gradient(135deg,#f6d365,#fda085)', labelKey: 'colorOther' },
+  { id: 'white',  bg: '#FFFFFF', border: '#D0C8BC', labelKey: 'checkout.colorWhite'  },
+  { id: 'black',  bg: '#1A1A1A',                    labelKey: 'checkout.colorBlack'  },
+  { id: 'gray',   bg: '#9E9E9E',                    labelKey: 'checkout.colorGray'   },
+  { id: 'red',    bg: '#C0392B',                    labelKey: 'checkout.colorRed'    },
+  { id: 'blue',   bg: '#2255A4',                    labelKey: 'checkout.colorBlue'   },
+  { id: 'other',  bg: 'linear-gradient(135deg,#f6d365,#fda085)', labelKey: 'checkout.colorOther' },
 ];
 
 const BRANDS = ['Toyota','Honda','Isuzu','Mazda','Mitsubishi','Nissan','MG','BYD','Tesla','BMW','Benz','Aion','Ford'];
@@ -84,8 +83,7 @@ function makeShopInfo(): ShopInfo {
 export default function Checkout() {
   const navigate       = useNavigate();
   const { items, clear } = useCart();
-  const { lang }       = useLang();
-  const L              = LANG_MAP[lang];
+  const { t, lang }    = useT();
 
   /* ── Method — null = not yet chosen this session ───────── */
   const [method, setMethodState] = useState<string | null>(() => {
@@ -209,23 +207,23 @@ export default function Checkout() {
 
     // Validate in order — scroll to first issue
     if (!method) {
-      setSubmitHint(L.validMethod);
+      setSubmitHint(t('checkout.validMethod'));
       methodRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
     if (isCurbside && !vehicleColor) {
-      setSubmitHint(L.validVehicleColor);
+      setSubmitHint(t('checkout.validVehicleColor'));
       vehicleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
     if (isCurbside && vehicleColor === 'other' && colorOtherText.trim() === '') {
-      setSubmitHint(L.validVehicleColorOther);
+      setSubmitHint(t('checkout.validVehicleColorOther'));
       colorOtherInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       colorOtherInputRef.current?.focus();
       return;
     }
     if (selSlot === undefined) {
-      setSubmitHint(L.validTime);
+      setSubmitHint(t('checkout.validTime'));
       timeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
@@ -235,19 +233,19 @@ export default function Checkout() {
     if (typeof selSlot === 'string' && !currentInfo.slots.some(s => s.value === selSlot)) {
       setSelSlot(undefined);
       setSlotExpiredMsg(true);
-      setSubmitHint(L.validTime);
+      setSubmitHint(t('checkout.validTime'));
       timeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
 
     if (!nameOk) {
-      setSubmitHint(L.validName);
+      setSubmitHint(t('checkout.validName'));
       nameRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       nameRef.current?.focus();
       return;
     }
     if (!phoneOk) {
-      setSubmitHint(L.validPhone);
+      setSubmitHint(t('checkout.validPhone'));
       phoneRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       phoneRef.current?.focus();
       return;
@@ -310,7 +308,7 @@ export default function Checkout() {
       setError(
         TEST_MODE && dbError
           ? `[INSERT orders] ${dbError.message}${dbError.code ? ` / ${dbError.code}` : ''}`
-          : L.orderError
+          : t('checkout.orderError')
       );
       return;
     }
@@ -376,21 +374,21 @@ export default function Checkout() {
           {I.back(22)}
         </button>
         <div style={{ flex: 1 }}>
-          <div className="kicker">{L.checkoutKicker}</div>
-          <div style={{ fontFamily: 'var(--serif)', fontSize: 16, marginTop: 1 }}>{L.checkoutTitle}</div>
+          <div className="kicker">{t('checkout.kicker')}</div>
+          <div style={{ fontFamily: 'var(--serif)', fontSize: 16, marginTop: 1 }}>{t('checkout.title')}</div>
         </div>
       </div>
 
       {/* ── 1. วิธีรับ ──────────────────────────────────────── */}
       <div ref={methodRef} style={{ padding: '18px 18px 0' }}>
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', color: 'var(--ink-3)', textTransform: 'uppercase', marginBottom: 8 }}>
-          {L.sectionMethod}
+          {t('checkout.sectionMethod')}
         </div>
         <div style={{
           display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6,
           padding: 4, borderRadius: 'var(--r-md)',
           background: 'var(--bg-3)',
-          outline: submitHint === L.validMethod && !method ? '1.5px solid var(--accent)' : 'none',
+          outline: submitHint === t('checkout.validMethod') && !method ? '1.5px solid var(--accent)' : 'none',
           outlineOffset: 2,
         }}>
           {METHODS.map(m => (
@@ -408,13 +406,13 @@ export default function Checkout() {
                 fontFamily: 'var(--serif)', fontSize: 12,
                 color: method === m.id ? 'var(--ink)' : 'var(--ink-3)',
               }}>
-                {L[m.key]}
+                {t(m.labelKey)}
               </div>
             </button>
           ))}
         </div>
-        {submitHint === L.validMethod && !method && (
-          <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 5 }}>{L.validMethod}</div>
+        {submitHint === t('checkout.validMethod') && !method && (
+          <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 5 }}>{t('checkout.validMethod')}</div>
         )}
       </div>
 
@@ -422,10 +420,10 @@ export default function Checkout() {
       {isCurbside && (
         <div ref={vehicleRef} style={{ padding: '14px 18px 0' }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', color: 'var(--ink-3)', textTransform: 'uppercase', marginBottom: 4 }}>
-            {L.sectionVehicle}
+            {t('checkout.sectionVehicle')}
           </div>
           <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 10, lineHeight: 1.55 }}>
-            {L.vehicleDesc}
+            {t('checkout.vehicleDesc')}
           </div>
 
           {/* Color chips — required */}
@@ -451,7 +449,7 @@ export default function Checkout() {
                     border: `1px solid ${c.border ?? 'transparent'}`,
                     boxSizing: 'border-box',
                   }} />
-                  {(L as unknown as Record<string, string>)[c.labelKey]}
+                  {t(c.labelKey as Parameters<typeof t>[0])}
                 </button>
               );
             })}
@@ -463,24 +461,24 @@ export default function Checkout() {
                 type="text"
                 autoFocus
                 maxLength={20}
-                placeholder={L.colorOtherPlaceholder}
+                placeholder={t('checkout.colorOtherPlaceholder')}
                 value={colorOtherText}
                 onChange={e => { setColorOtherText(stripControl(e.target.value)); setSubmitHint(null); }}
                 style={{
                   width: '100%', background: 'var(--bg-2)',
-                  border: submitHint === L.validVehicleColorOther ? '1.5px solid var(--accent)' : '1px solid var(--line)',
+                  border: submitHint === t('checkout.validVehicleColorOther') ? '1.5px solid var(--accent)' : '1px solid var(--line)',
                   borderRadius: 'var(--r-sm)', padding: '8px 12px',
                   fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink)', outline: 'none',
                   boxSizing: 'border-box',
                 }}
               />
-              {submitHint === L.validVehicleColorOther && (
-                <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4 }}>{L.validVehicleColorOther}</div>
+              {submitHint === t('checkout.validVehicleColorOther') && (
+                <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4 }}>{t('checkout.validVehicleColorOther')}</div>
               )}
             </div>
           )}
-          {submitHint === L.validVehicleColor && !vehicleColor && (
-            <div style={{ fontSize: 11, color: 'var(--accent)', marginBottom: 6 }}>{L.validVehicleColor}</div>
+          {submitHint === t('checkout.validVehicleColor') && !vehicleColor && (
+            <div style={{ fontSize: 11, color: 'var(--accent)', marginBottom: 6 }}>{t('checkout.validVehicleColor')}</div>
           )}
 
           {/* Brand chips — optional */}
@@ -517,7 +515,7 @@ export default function Checkout() {
                     color: selected ? 'var(--ink)' : 'var(--ink-2)',
                   }}
                 >
-                  {L.brandOther}
+                  {t('checkout.brandOther')}
                 </button>
               );
             })()}
@@ -528,7 +526,7 @@ export default function Checkout() {
                 type="text"
                 autoFocus
                 maxLength={20}
-                placeholder={L.brandOtherPlaceholder}
+                placeholder={t('checkout.brandOtherPlaceholder')}
                 value={brandOtherText}
                 onChange={e => setBrandOtherText(stripControl(e.target.value))}
                 style={{
@@ -548,10 +546,10 @@ export default function Checkout() {
       {/* Branch picker component kept but not rendered — for future multi-branch use */}
       <div style={{ padding: '12px 18px 0' }}>
         <div style={{ fontSize: 12, color: 'var(--ink-2)', display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-          <span style={{ color: 'var(--ink-3)', marginRight: 2 }}>{lang === 'th' ? 'รับที่' : 'Pickup at'}</span>
+          <span style={{ color: 'var(--ink-3)', marginRight: 2 }}>{t('checkout.pickupAt')}</span>
           <span style={{ fontFamily: 'var(--serif)', fontSize: 12.5, color: 'var(--ink)' }}>{SHOP.branchName}</span>
           <span style={{ color: 'var(--ink-3)' }}>·</span>
-          <span style={{ color: 'var(--ink-3)' }}>{L.openUntil(shopCloseLabel())}</span>
+          <span style={{ color: 'var(--ink-3)' }}>{t('checkout.openUntil', shopCloseLabel())}</span>
           {LINKS.googleMaps && (
             <>
               <span style={{ color: 'var(--ink-3)' }}>·</span>
@@ -561,7 +559,7 @@ export default function Checkout() {
                 rel="noopener noreferrer"
                 style={{ color: 'var(--accent)', fontWeight: 600, fontSize: 12, textDecoration: 'none' }}
               >
-                {L.mapLink}
+                {t('checkout.mapLink')}
               </a>
             </>
           )}
@@ -571,7 +569,7 @@ export default function Checkout() {
       {/* ── 3. เวลารับ ──────────────────────────────────────── */}
       <div ref={timeRef} style={{ padding: '18px 18px 0' }}>
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', color: 'var(--ink-3)', textTransform: 'uppercase', marginBottom: 8 }}>
-          {L.sectionTime}
+          {t('checkout.sectionTime')}
         </div>
 
         {/* Method not chosen yet */}
@@ -581,7 +579,7 @@ export default function Checkout() {
             background: 'var(--bg-2)', border: '1px solid var(--line)',
             fontSize: 13, color: 'var(--ink-3)',
           }}>
-            {L.timeChooseMethodFirst}
+            {t('checkout.timeChooseMethodFirst')}
           </div>
         )}
 
@@ -592,7 +590,7 @@ export default function Checkout() {
             background: 'rgba(43,33,24,0.06)', border: '1px solid var(--line)',
             fontSize: 13, color: 'var(--ink-2)',
           }}>
-            <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{L.shopClosedLabel}</span>
+            <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{t('checkout.shopClosedLabel')}</span>
             {' · '}<span style={{ fontFamily: 'var(--mono)', fontWeight: 600 }}>{shopInfo.nextOpenMsg}</span>
           </div>
         )}
@@ -604,14 +602,14 @@ export default function Checkout() {
             background: 'rgba(43,33,24,0.06)', border: '1px solid var(--line)',
             fontSize: 13, color: 'var(--ink-2)',
           }}>
-            {L.timeNearCloseMsg}
+            {t('checkout.timeNearCloseMsg')}
           </div>
         )}
 
         {/* Slot expired warning */}
         {slotExpiredMsg && (
           <div style={{ fontSize: 11, color: 'var(--accent)', marginBottom: 8 }}>
-            {L.timeExpiredMsg}
+            {t('checkout.timeExpiredMsg')}
           </div>
         )}
 
@@ -620,7 +618,7 @@ export default function Checkout() {
           <>
             <div style={{
               display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6,
-              outline: submitHint === L.validTime && selSlot === undefined ? '1.5px solid var(--accent)' : 'none',
+              outline: submitHint === t('checkout.validTime') && selSlot === undefined ? '1.5px solid var(--accent)' : 'none',
               outlineOffset: 3, borderRadius: 'var(--r-sm)',
             }}>
               {shopInfo.slots.map((s) => {
@@ -648,7 +646,7 @@ export default function Checkout() {
                         background: 'rgba(178,58,31,0.10)',
                         padding: '1px 5px', borderRadius: 'var(--r-pill)',
                       }}>
-                        {L.timeEarliestBadge}
+                        {t('checkout.timeEarliestBadge')}
                       </span>
                     )}
                     <div style={{
@@ -659,7 +657,7 @@ export default function Checkout() {
                       {s.label}
                     </div>
                     <div style={{ fontSize: 10, color: 'var(--ink-3)' }}>
-                      {L.timeInMin(s.diffMin)}
+                      {t('checkout.timeInMin', s.diffMin)}
                     </div>
                   </button>
                 );
@@ -669,13 +667,13 @@ export default function Checkout() {
             {/* Confirmation line */}
             {selSlot !== undefined && selectedSlotObj && (
               <div style={{ marginTop: 8, fontSize: 11, color: 'var(--accent-2)', fontWeight: 600 }}>
-                {L.timeConfirm(selectedSlotObj.label)}
+                {t('checkout.timeConfirm', selectedSlotObj.label)}
               </div>
             )}
 
             {/* Validation hint */}
-            {submitHint === L.validTime && selSlot === undefined && (
-              <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 5 }}>{L.validTime}</div>
+            {submitHint === t('checkout.validTime') && selSlot === undefined && (
+              <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 5 }}>{t('checkout.validTime')}</div>
             )}
           </>
         )}
@@ -685,24 +683,24 @@ export default function Checkout() {
       <div style={{ padding: '18px 18px 0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', color: 'var(--ink-3)', textTransform: 'uppercase' }}>
-            {L.sectionContact}
+            {t('checkout.sectionContact')}
           </div>
           <span style={{
             fontSize: 9.5, fontWeight: 700, letterSpacing: '.05em', color: 'var(--accent-2)',
             background: 'rgba(74,93,63,0.14)', padding: '3px 8px', borderRadius: 'var(--r-pill)',
           }}>
-            {L.noSignupBadge}
+            {t('checkout.noSignupBadge')}
           </span>
         </div>
 
         {/* Name */}
         <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 10, color: 'var(--ink-3)', marginBottom: 4 }}>{L.nameLabel}</div>
+          <div style={{ fontSize: 10, color: 'var(--ink-3)', marginBottom: 4 }}>{t('checkout.nameLabel')}</div>
           <input
             ref={nameRef}
             type="text"
             autoComplete="name"
-            placeholder={L.namePlaceholder}
+            placeholder={t('checkout.namePlaceholder')}
             value={name}
             onChange={e => setName(e.target.value)}
             onBlur={() => setNameTouched(true)}
@@ -712,19 +710,19 @@ export default function Checkout() {
             }}
           />
           {nameTouched && !nameOk && (
-            <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4 }}>{L.nameError}</div>
+            <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4 }}>{t('checkout.nameError')}</div>
           )}
         </div>
 
         {/* Phone */}
         <div>
-          <div style={{ fontSize: 10, color: 'var(--ink-3)', marginBottom: 4 }}>{L.phoneLabel}</div>
+          <div style={{ fontSize: 10, color: 'var(--ink-3)', marginBottom: 4 }}>{t('checkout.phoneLabel')}</div>
           <input
             ref={phoneRef}
             type="tel"
             inputMode="tel"
             autoComplete="tel"
-            placeholder={L.phonePlaceholder}
+            placeholder={t('checkout.phonePlaceholder')}
             value={phone}
             onChange={e => {
               const digits = digitsOnly(e.target.value);
@@ -739,7 +737,7 @@ export default function Checkout() {
           />
           {phoneTouched && !phoneOk && (
             <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4 }}>
-              {phone.trim() === '' ? L.phoneErrorEmpty : L.phoneErrorInvalid}
+              {phone.trim() === '' ? t('checkout.phoneErrorEmpty') : t('checkout.phoneErrorInvalid')}
             </div>
           )}
         </div>
@@ -748,7 +746,7 @@ export default function Checkout() {
         <div style={{ marginTop: 10, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
           <span style={{ color: 'var(--accent-2)', flexShrink: 0, marginTop: 1 }}>{I.check(12)}</span>
           <span style={{ fontSize: 10.5, color: 'var(--ink-3)', lineHeight: 1.55 }}>
-            {L.pdpaText}
+            {t('checkout.pdpaText')}
           </span>
         </div>
       </div>
@@ -756,19 +754,19 @@ export default function Checkout() {
       {/* ── 5. ชำระเงิน ─────────────────────────────────────── */}
       <div style={{ padding: '18px 18px 0' }}>
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', color: 'var(--ink-3)', textTransform: 'uppercase', marginBottom: 8 }}>
-          {L.sectionPayment}
+          {t('checkout.sectionPayment')}
         </div>
         {isCurbside && CURBSIDE_PROMPTPAY_ONLY && (
           <div style={{
             padding: '8px 12px', borderRadius: 'var(--r-sm)', marginBottom: 6,
             background: 'var(--bg-3)', fontSize: 11, color: 'var(--ink-3)',
           }}>
-            {L.curbsidePromptpayOnly}
+            {t('checkout.curbsidePromptpayOnly')}
           </div>
         )}
         {[
-          { id: 'promptpay', label: L.promptpayLabel, sub: L.promptpaySub, icon: I.qr(16) },
-          { id: 'cash',      label: L.cashLabel,      sub: L.cashSub,      icon: I.cash(16) },
+          { id: 'promptpay', label: t('checkout.promptpayLabel'), sub: t('checkout.promptpaySub'), icon: I.qr(16) },
+          { id: 'cash',      label: t('checkout.cashLabel'),      sub: t('checkout.cashSub'),      icon: I.cash(16) },
         ]
           .filter(p => ENABLE_BEAM || p.id !== 'promptpay')
           .filter(p => !(isCurbside && CURBSIDE_PROMPTPAY_ONLY && p.id === 'cash'))
@@ -808,10 +806,10 @@ export default function Checkout() {
           }}
         >
           <span style={{ fontFamily: 'var(--serif)', fontSize: 13, color: 'var(--ink)' }}>
-            {L.sectionSummary}
+            {t('checkout.sectionSummary')}
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--ink-2)' }}>
-            <span style={{ fontFamily: 'var(--mono)' }}>{L.summaryNItems(itemCount, total)}</span>
+            <span style={{ fontFamily: 'var(--mono)' }}>{t('checkout.summaryNItems', itemCount, total)}</span>
             {I.chevron(14, summaryOpen ? 'up' : 'down')}
           </span>
         </button>
@@ -841,7 +839,7 @@ export default function Checkout() {
             fontSize: 11, color: 'var(--accent)', fontWeight: 600,
           }}
         >
-          {L.editCart}
+          {t('checkout.editCart')}
         </button>
       </div>
 
@@ -880,12 +878,12 @@ export default function Checkout() {
         >
           <span>
             {loading
-              ? L.orderLoading
+              ? t('checkout.orderLoading')
               : !shopInfo.isOpen
-                ? L.shopClosedLabel
+                ? t('checkout.shopClosedLabel')
                 : payment === 'promptpay'
-                  ? L.payBtnQR(total)
-                  : L.payBtnCash(total)}
+                  ? t('checkout.payBtnQR', total)
+                  : t('checkout.payBtnCash', total)}
           </span>
           {!loading && <span>{I.arrow(14)}</span>}
         </button>

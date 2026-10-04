@@ -35,11 +35,21 @@ const VEHICLE_COLORS: { id: string; bg: string; border?: string; labelKey: strin
   { id: 'other',  bg: 'linear-gradient(135deg,#f6d365,#fda085)', labelKey: 'colorOther' },
 ];
 
-const BRANDS = ['Toyota','Honda','Isuzu','Mazda','Mitsubishi','Nissan','MG','Ford','Yamaha'];
+const BRANDS = ['Toyota','Honda','Isuzu','Mazda','Mitsubishi','Nissan','MG','BYD','Tesla','BMW','Benz','Aion','Ford'];
+const BRAND_OTHER_ID = '__other__';
+const BRAND_DISPLAY_EN: Record<string, string> = { 'Benz': 'Mercedes-Benz' };
+function brandLabel(brand: string, currentLang: string): string {
+  if (currentLang === 'en' && BRAND_DISPLAY_EN[brand]) return BRAND_DISPLAY_EN[brand];
+  return brand;
+}
 
 /* ── Helpers ─────────────────────────────────────────────── */
 function digitsOnly(v: string) { return v.replace(/\D/g, ''); }
 function isPhoneOk(v: string)  { return /^\d{10}$/.test(digitsOnly(v)); }
+function stripControl(v: string) { return v.replace(/[\r\n\u0000-\u001F\u007F-\u009F]/g, ''); }
+function sanitizeVehicleText(v: string) {
+  return v.replace(/[\r\n\u0000-\u001F\u007F-\u009F]/g, '').replace(/\s+/g, ' ').trim();
+}
 
 const inputBase: React.CSSProperties = {
   width: '100%',
@@ -136,18 +146,23 @@ export default function Checkout() {
   }, []);
 
   /* ── Vehicle (curbside) ─────────────────────────────────── */
-  const [vehicleColor, setVehicleColor] = useState<string | null>(null);
-  const [vehicleBrand, setVehicleBrand] = useState<string | null>(null);
-  const vehicleRef = useRef<HTMLDivElement>(null);
+  const [vehicleColor,     setVehicleColor]     = useState<string | null>(null);
+  const [colorOtherText,   setColorOtherText]   = useState('');
+  const [vehicleBrand,     setVehicleBrand]     = useState<string | null>(null);
+  const [brandOtherText,   setBrandOtherText]   = useState('');
+  const vehicleRef        = useRef<HTMLDivElement>(null);
+  const colorOtherInputRef = useRef<HTMLInputElement>(null);
   const isCurbside = method === 'curbside';
 
   useEffect(() => {
     const saved = localStorage.getItem(VEHICLE_KEY);
     if (saved) {
       try {
-        const { color, brand } = JSON.parse(saved);
+        const { color, colorOtherText: cot, brand, brandOtherText: bot } = JSON.parse(saved);
         if (color) setVehicleColor(color);
+        if (cot)   setColorOtherText(cot);
         if (brand) setVehicleBrand(brand);
+        if (bot)   setBrandOtherText(bot);
       } catch { /* ignore */ }
     }
   }, []);
@@ -201,6 +216,12 @@ export default function Checkout() {
     if (isCurbside && !vehicleColor) {
       setSubmitHint(L.validVehicleColor);
       vehicleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    if (isCurbside && vehicleColor === 'other' && colorOtherText.trim() === '') {
+      setSubmitHint(L.validVehicleColorOther);
+      colorOtherInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      colorOtherInputRef.current?.focus();
       return;
     }
     if (selSlot === undefined) {
@@ -302,7 +323,12 @@ export default function Checkout() {
 
     // Save vehicle for next visit (only on success)
     if (isCurbside && vehicleColor) {
-      localStorage.setItem(VEHICLE_KEY, JSON.stringify({ color: vehicleColor, brand: vehicleBrand }));
+      localStorage.setItem(VEHICLE_KEY, JSON.stringify({
+        color:          vehicleColor,
+        colorOtherText: sanitizeVehicleText(colorOtherText),
+        brand:          vehicleBrand,
+        brandOtherText: sanitizeVehicleText(brandOtherText),
+      }));
     }
 
     /* INSERT order_contacts — fail silently */
@@ -403,7 +429,7 @@ export default function Checkout() {
           </div>
 
           {/* Color chips — required */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: vehicleColor === 'other' ? 0 : 10 }}>
             {VEHICLE_COLORS.map(c => {
               const selected = vehicleColor === c.id;
               return (
@@ -430,13 +456,36 @@ export default function Checkout() {
               );
             })}
           </div>
+          {vehicleColor === 'other' && (
+            <div style={{ marginTop: 6, marginBottom: 10 }}>
+              <input
+                ref={colorOtherInputRef}
+                type="text"
+                autoFocus
+                maxLength={20}
+                placeholder={L.colorOtherPlaceholder}
+                value={colorOtherText}
+                onChange={e => { setColorOtherText(stripControl(e.target.value)); setSubmitHint(null); }}
+                style={{
+                  width: '100%', background: 'var(--bg-2)',
+                  border: submitHint === L.validVehicleColorOther ? '1.5px solid var(--accent)' : '1px solid var(--line)',
+                  borderRadius: 'var(--r-sm)', padding: '8px 12px',
+                  fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink)', outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+              />
+              {submitHint === L.validVehicleColorOther && (
+                <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4 }}>{L.validVehicleColorOther}</div>
+              )}
+            </div>
+          )}
           {submitHint === L.validVehicleColor && !vehicleColor && (
             <div style={{ fontSize: 11, color: 'var(--accent)', marginBottom: 6 }}>{L.validVehicleColor}</div>
           )}
 
           {/* Brand chips — optional */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {[...BRANDS, L.brandOther].map(b => {
+            {BRANDS.map(b => {
               const selected = vehicleBrand === b;
               return (
                 <button
@@ -450,11 +499,48 @@ export default function Checkout() {
                     color: selected ? 'var(--ink)' : 'var(--ink-2)',
                   }}
                 >
-                  {b}
+                  {brandLabel(b, lang)}
                 </button>
               );
             })}
+            {(() => {
+              const selected = vehicleBrand === BRAND_OTHER_ID;
+              return (
+                <button
+                  key={BRAND_OTHER_ID}
+                  onClick={() => setVehicleBrand(selected ? null : BRAND_OTHER_ID)}
+                  style={{
+                    padding: '7px 12px', borderRadius: 'var(--r-pill)',
+                    border: selected ? '1.5px solid var(--ink)' : '1px solid var(--line)',
+                    background: selected ? 'var(--bg-2)' : 'var(--bg)',
+                    cursor: 'pointer', fontSize: 12,
+                    color: selected ? 'var(--ink)' : 'var(--ink-2)',
+                  }}
+                >
+                  {L.brandOther}
+                </button>
+              );
+            })()}
           </div>
+          {vehicleBrand === BRAND_OTHER_ID && (
+            <div style={{ marginTop: 6 }}>
+              <input
+                type="text"
+                autoFocus
+                maxLength={20}
+                placeholder={L.brandOtherPlaceholder}
+                value={brandOtherText}
+                onChange={e => setBrandOtherText(stripControl(e.target.value))}
+                style={{
+                  width: '100%', background: 'var(--bg-2)',
+                  border: '1px solid var(--line)',
+                  borderRadius: 'var(--r-sm)', padding: '8px 12px',
+                  fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink)', outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+          )}
         </div>
       )}
 

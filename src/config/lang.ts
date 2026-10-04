@@ -105,9 +105,12 @@ const TH = {
   colorRed:               'แดง',
   colorBlue:              'น้ำเงิน',
   colorOther:             'อื่นๆ',
+  colorOtherPlaceholder:  'เช่น ส้ม เขียว',
   brandOther:             'อื่นๆ',
+  brandOtherPlaceholder:  'ชื่อยี่ห้อ',
   curbsidePromptpayOnly:  'ถึงรถ ชำระผ่าน PromptPay',
   validVehicleColor:      'เลือกสีรถ',
+  validVehicleColorOther: 'ใส่สีรถสั้นๆ',
 
   /* Payment */
   sectionPayment:         'ชำระเงิน',
@@ -251,9 +254,12 @@ const EN: typeof TH = {
   colorRed:               'Red',
   colorBlue:              'Blue',
   colorOther:             'Other',
+  colorOtherPlaceholder:  'e.g. Orange, Green',
   brandOther:             'Other',
+  brandOtherPlaceholder:  'Brand name',
   curbsidePromptpayOnly:  'Curbside orders are paid by PromptPay',
   validVehicleColor:      'Choose a car color',
+  validVehicleColorOther: 'Add a car color',
 
   /* Payment */
   sectionPayment:         'Payment',

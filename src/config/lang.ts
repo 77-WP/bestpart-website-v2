@@ -47,6 +47,7 @@ const TH = {
   cartEmptyMsg:           'เพิ่มเมนูที่ชอบจากหน้า Menu ก่อนนะ',
   cartEmptyBtn:           'ดูเมนู',
   editMyWay:              'แก้แบบของฉัน',
+  editLabel:              'แก้ไข',
   removedMsg:             'เอาออกแล้ว',
   undoLabel:              'เลิกทำ',
   totalLabel:             'ยอดรวม · TOTAL',
@@ -55,6 +56,10 @@ const TH = {
   cutlerySection:         'ช้อนส้อม & เครื่องปรุง',
   cutleryLabel:           'ช้อนส้อม',
   condimentsLabel:        'พริกน้ำปลา',
+  cutleryChip:            'รับช้อนส้อม',
+  condimentsChip:         'รับพริกน้ำปลา',
+  kitchenNoteTitle:       'ข้อความถึงครัว',
+  kitchenNotePlaceholder: 'มีอะไรอยากบอกครัว พิมพ์ได้เลย',
 };
 
 const EN: typeof TH = {
@@ -96,6 +101,7 @@ const EN: typeof TH = {
   cartEmptyMsg:           'Add your favourite dishes first',
   cartEmptyBtn:           'See menu',
   editMyWay:              'Edit My Way',
+  editLabel:              'Edit',
   removedMsg:             'Removed',
   undoLabel:              'Undo',
   totalLabel:             'Total',
@@ -104,6 +110,10 @@ const EN: typeof TH = {
   cutlerySection:         'Cutlery & condiments',
   cutleryLabel:           'Cutlery',
   condimentsLabel:        'Chili fish sauce',
+  cutleryChip:            'Cutlery',
+  condimentsChip:         'Chili fish sauce',
+  kitchenNoteTitle:       'Note for the kitchen',
+  kitchenNotePlaceholder: "Anything you'd like us to know",
 };
 
 export const LANG_MAP = { th: TH, en: EN } as const;

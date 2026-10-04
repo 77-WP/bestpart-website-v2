@@ -17,9 +17,10 @@ export type CartItem = {
   isDrink?: boolean;    // true for items added from the drinks rail
 };
 
-/** Cutlery / condiments defaults — change here to update behaviour. */
+/** Cutlery / condiments / kitchen-note defaults — change here to update behaviour. */
 export const CUTLERY_DEFAULT    = false;
 export const CONDIMENTS_DEFAULT = false;
+export const KITCHEN_NOTE_DEFAULT = '';
 
 export function itemTotal(it: CartItem) {
   const addonsTotal = it.addons.reduce((s, a) => s + a.price, 0);
@@ -34,6 +35,7 @@ type CartState = {
   items: CartItem[];
   cutlery: boolean;
   condiments: boolean;
+  kitchenNote: string;
 };
 
 type Action =
@@ -43,7 +45,8 @@ type Action =
   | { type: 'SET_QTY'; cartId: string; qty: number }
   | { type: 'CLEAR' }
   | { type: 'SET_CUTLERY'; value: boolean }
-  | { type: 'SET_CONDIMENTS'; value: boolean };
+  | { type: 'SET_CONDIMENTS'; value: boolean }
+  | { type: 'SET_KITCHEN_NOTE'; value: string };
 
 function reducer(state: CartState, action: Action): CartState {
   switch (action.type) {
@@ -69,6 +72,8 @@ function reducer(state: CartState, action: Action): CartState {
       return { ...state, cutlery: action.value };
     case 'SET_CONDIMENTS':
       return { ...state, condiments: action.value };
+    case 'SET_KITCHEN_NOTE':
+      return { ...state, kitchenNote: action.value };
     default:
       return state;
   }
@@ -78,6 +83,7 @@ const CartCtx = createContext<{
   items: CartItem[];
   cutlery: boolean;
   condiments: boolean;
+  kitchenNote: string;
   add: (item: CartItem) => void;
   replace: (cartId: string, item: CartItem) => void;
   remove: (cartId: string) => void;
@@ -85,26 +91,30 @@ const CartCtx = createContext<{
   clear: () => void;
   setCutlery: (v: boolean) => void;
   setCondiments: (v: boolean) => void;
+  setKitchenNote: (v: string) => void;
 } | null>(null);
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, {
-    items:      [],
-    cutlery:    CUTLERY_DEFAULT,
-    condiments: CONDIMENTS_DEFAULT,
+    items:       [],
+    cutlery:     CUTLERY_DEFAULT,
+    condiments:  CONDIMENTS_DEFAULT,
+    kitchenNote: KITCHEN_NOTE_DEFAULT,
   });
   return (
     <CartCtx.Provider value={{
       items:        state.items,
       cutlery:      state.cutlery,
       condiments:   state.condiments,
+      kitchenNote:  state.kitchenNote,
       add:          (item)        => dispatch({ type: 'ADD', item }),
       replace:      (cartId, item) => dispatch({ type: 'REPLACE', cartId, item }),
       remove:       (cartId)      => dispatch({ type: 'REMOVE', cartId }),
       setQty:       (cartId, qty) => dispatch({ type: 'SET_QTY', cartId, qty }),
       clear:        ()            => dispatch({ type: 'CLEAR' }),
-      setCutlery:   (value)       => dispatch({ type: 'SET_CUTLERY', value }),
-      setCondiments:(value)       => dispatch({ type: 'SET_CONDIMENTS', value }),
+      setCutlery:     (value) => dispatch({ type: 'SET_CUTLERY', value }),
+      setCondiments:  (value) => dispatch({ type: 'SET_CONDIMENTS', value }),
+      setKitchenNote: (value) => dispatch({ type: 'SET_KITCHEN_NOTE', value }),
     }}>
       {children}
     </CartCtx.Provider>

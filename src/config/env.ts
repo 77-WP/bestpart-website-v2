@@ -8,3 +8,7 @@ export const TEST_MODE = import.meta.env.DEV && import.meta.env.VITE_TEST_MODE =
 
 /** True only when VITE_ENABLE_BEAM=true is set in .env.local */
 export const ENABLE_BEAM = import.meta.env.VITE_ENABLE_BEAM === 'true';
+
+/** When true, curbside orders are locked to PromptPay only (cash hidden).
+ *  Change this single flag to re-enable cash for curbside. */
+export const CURBSIDE_PROMPTPAY_ONLY = true;

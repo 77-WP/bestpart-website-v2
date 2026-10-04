@@ -129,3 +129,10 @@ button { font-family: inherit; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   [style*="bp-pulse"] { animation: none !important; }
 }
+
+/* QR overlay image — must allow long-press save on iOS */
+.qr-save-img {
+  -webkit-touch-callout: default;
+  user-select: auto;
+  pointer-events: auto;
+}

@@ -6,7 +6,7 @@ import { LANG_MAP } from '../config/lang';
 import { supabase } from '../lib/supabase';
 import { I } from '../components/icons';
 import { SHOP, shopCloseLabel, computeSlots, roundUp5, minToHHMM, type ShopInfo } from '../config/shop';
-import { TEST_MODE, ENABLE_BEAM } from '../config/env';
+import { TEST_MODE, ENABLE_BEAM, CURBSIDE_PROMPTPAY_ONLY } from '../config/env';
 import { LINKS } from '../config/links';
 import { saveLocalOrder } from '../lib/localOrders';
 
@@ -24,6 +24,18 @@ const FULFILLMENT_MAP: Record<string, string> = {
 };
 
 const CONTACT_KEY = 'bp_contact';
+const VEHICLE_KEY = 'bp_vehicle';
+
+const VEHICLE_COLORS: { id: string; bg: string; border?: string; labelKey: string }[] = [
+  { id: 'white',  bg: '#FFFFFF', border: '#D0C8BC', labelKey: 'colorWhite'  },
+  { id: 'black',  bg: '#1A1A1A',                    labelKey: 'colorBlack'  },
+  { id: 'gray',   bg: '#9E9E9E',                    labelKey: 'colorGray'   },
+  { id: 'red',    bg: '#C0392B',                    labelKey: 'colorRed'    },
+  { id: 'blue',   bg: '#2255A4',                    labelKey: 'colorBlue'   },
+  { id: 'other',  bg: 'linear-gradient(135deg,#f6d365,#fda085)', labelKey: 'colorOther' },
+];
+
+const BRANDS = ['Toyota','Honda','Isuzu','Mazda','Mitsubishi','Nissan','MG','Ford','Yamaha'];
 
 /* ── Helpers ─────────────────────────────────────────────── */
 function digitsOnly(v: string) { return v.replace(/\D/g, ''); }
@@ -123,8 +135,30 @@ export default function Checkout() {
     }
   }, []);
 
+  /* ── Vehicle (curbside) ─────────────────────────────────── */
+  const [vehicleColor, setVehicleColor] = useState<string | null>(null);
+  const [vehicleBrand, setVehicleBrand] = useState<string | null>(null);
+  const vehicleRef = useRef<HTMLDivElement>(null);
+  const isCurbside = method === 'curbside';
+
+  useEffect(() => {
+    const saved = localStorage.getItem(VEHICLE_KEY);
+    if (saved) {
+      try {
+        const { color, brand } = JSON.parse(saved);
+        if (color) setVehicleColor(color);
+        if (brand) setVehicleBrand(brand);
+      } catch { /* ignore */ }
+    }
+  }, []);
+
   /* ── Payment ─────────────────────────────────────────────  */
   const [payment, setPayment] = useState(ENABLE_BEAM ? 'promptpay' : 'cash');
+
+  /* Lock to PromptPay when curbside */
+  useEffect(() => {
+    if (isCurbside && CURBSIDE_PROMPTPAY_ONLY) setPayment('promptpay');
+  }, [isCurbside]);
 
   /* ── Summary collapsible ─────────────────────────────────  */
   const [summaryOpen, setSummaryOpen] = useState(false);
@@ -162,6 +196,11 @@ export default function Checkout() {
     if (!method) {
       setSubmitHint(L.validMethod);
       methodRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    if (isCurbside && !vehicleColor) {
+      setSubmitHint(L.validVehicleColor);
+      vehicleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
     if (selSlot === undefined) {
@@ -215,6 +254,7 @@ export default function Checkout() {
     const rawPickup  = selSlot ?? null;
     const pickupTime = rawPickup && /^\d{2}:\d{2}(:\d{2})?$/.test(rawPickup) ? rawPickup : null;
 
+    // TODO(curbside): include vehicle details in order when ready
     const insertPayload = {
       items:                   orderItems,
       subtotal:                subtotal,
@@ -259,6 +299,11 @@ export default function Checkout() {
 
     // Save contact for next visit (only on success)
     localStorage.setItem(CONTACT_KEY, JSON.stringify({ name: name.trim(), phone: digitsOnly(phone) }));
+
+    // Save vehicle for next visit (only on success)
+    if (isCurbside && vehicleColor) {
+      localStorage.setItem(VEHICLE_KEY, JSON.stringify({ color: vehicleColor, brand: vehicleBrand }));
+    }
 
     /* INSERT order_contacts — fail silently */
     supabase
@@ -346,6 +391,72 @@ export default function Checkout() {
           <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 5 }}>{L.validMethod}</div>
         )}
       </div>
+
+      {/* ── 1b. รถของคุณ (curbside only) ──────────────────────── */}
+      {isCurbside && (
+        <div ref={vehicleRef} style={{ padding: '14px 18px 0' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', color: 'var(--ink-3)', textTransform: 'uppercase', marginBottom: 4 }}>
+            {L.sectionVehicle}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 10, lineHeight: 1.55 }}>
+            {L.vehicleDesc}
+          </div>
+
+          {/* Color chips — required */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+            {VEHICLE_COLORS.map(c => {
+              const selected = vehicleColor === c.id;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => { setVehicleColor(c.id); setSubmitHint(null); }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '7px 12px', borderRadius: 'var(--r-pill)',
+                    border: selected ? '1.5px solid var(--ink)' : '1px solid var(--line)',
+                    background: selected ? 'var(--bg-2)' : 'var(--bg)',
+                    cursor: 'pointer', fontSize: 12,
+                    color: selected ? 'var(--ink)' : 'var(--ink-2)',
+                  }}
+                >
+                  <span style={{
+                    width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
+                    background: c.bg,
+                    border: `1px solid ${c.border ?? 'transparent'}`,
+                    boxSizing: 'border-box',
+                  }} />
+                  {(L as unknown as Record<string, string>)[c.labelKey]}
+                </button>
+              );
+            })}
+          </div>
+          {submitHint === L.validVehicleColor && !vehicleColor && (
+            <div style={{ fontSize: 11, color: 'var(--accent)', marginBottom: 6 }}>{L.validVehicleColor}</div>
+          )}
+
+          {/* Brand chips — optional */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {[...BRANDS, L.brandOther].map(b => {
+              const selected = vehicleBrand === b;
+              return (
+                <button
+                  key={b}
+                  onClick={() => setVehicleBrand(selected ? null : b)}
+                  style={{
+                    padding: '7px 12px', borderRadius: 'var(--r-pill)',
+                    border: selected ? '1.5px solid var(--ink)' : '1px solid var(--line)',
+                    background: selected ? 'var(--bg-2)' : 'var(--bg)',
+                    cursor: 'pointer', fontSize: 12,
+                    color: selected ? 'var(--ink)' : 'var(--ink-2)',
+                  }}
+                >
+                  {b}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ── 2. รับที่ (single line, hidden branch-picker component kept) ── */}
       {/* Branch picker component kept but not rendered — for future multi-branch use */}
@@ -561,10 +672,21 @@ export default function Checkout() {
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', color: 'var(--ink-3)', textTransform: 'uppercase', marginBottom: 8 }}>
           {L.sectionPayment}
         </div>
+        {isCurbside && CURBSIDE_PROMPTPAY_ONLY && (
+          <div style={{
+            padding: '8px 12px', borderRadius: 'var(--r-sm)', marginBottom: 6,
+            background: 'var(--bg-3)', fontSize: 11, color: 'var(--ink-3)',
+          }}>
+            {L.curbsidePromptpayOnly}
+          </div>
+        )}
         {[
           { id: 'promptpay', label: L.promptpayLabel, sub: L.promptpaySub, icon: I.qr(16) },
           { id: 'cash',      label: L.cashLabel,      sub: L.cashSub,      icon: I.cash(16) },
-        ].filter(p => ENABLE_BEAM || p.id !== 'promptpay').map(p => (
+        ]
+          .filter(p => ENABLE_BEAM || p.id !== 'promptpay')
+          .filter(p => !(isCurbside && CURBSIDE_PROMPTPAY_ONLY && p.id === 'cash'))
+          .map(p => (
           <label
             key={p.id}
             onClick={() => setPayment(p.id)}

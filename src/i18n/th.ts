@@ -204,6 +204,12 @@ export const TH = {
   'track.orderAgain':        'สั่งอีกครั้ง',
   'track.allOrders':         'ดูออเดอร์ทั้งหมด',
   'track.goToPay':           'ชำระเงิน',
+  'track.notFound':          'ไม่พบออเดอร์',
+  'track.backHome':          'กลับหน้าแรก',
+  'track.noItems':           'ไม่มีข้อมูลรายการ',
+
+  // ── Menu badge ────────────────────────────────────────────
+  'menu.badge.best':         'แนะนำ',
 
   // ── Orders ────────────────────────────────────────────────
   'orders.pageTitle':         'ออเดอร์',

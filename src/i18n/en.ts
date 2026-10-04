@@ -201,6 +201,12 @@ export const EN: Dict = {
   'track.orderAgain':        'Order again',
   'track.allOrders':         'View all orders',
   'track.goToPay':           'Pay now',
+  'track.notFound':          'Order not found',
+  'track.backHome':          'Back to home',
+  'track.noItems':           'No items',
+
+  // ── Menu badge ────────────────────────────────────────────
+  'menu.badge.best':         'Best',
 
   // ── Orders ────────────────────────────────────────────────
   'orders.pageTitle':         'Orders',

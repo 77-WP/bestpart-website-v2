@@ -6,7 +6,7 @@ import { I } from '../components/icons';
 import { SHOP } from '../config/shop';
 import { LINKS } from '../config/links';
 import { TEST_MODE } from '../config/env';
-import { useT } from '../i18n';
+import { useT, DICT } from '../i18n';
 import type { Dict } from '../i18n';
 import { getLocalOrders } from '../lib/localOrders';
 
@@ -94,6 +94,7 @@ function Skeleton() {
 /* ── Not found ────────────────────────────────────────────── */
 function OrderNotFound({ orderId }: { orderId: string }) {
   const navigate = useNavigate();
+  const { t: tLocal } = useT();
   return (
     <div className="page" style={{
       paddingBottom: 80, display: 'flex', flexDirection: 'column',
@@ -101,7 +102,7 @@ function OrderNotFound({ orderId }: { orderId: string }) {
       minHeight: '100dvh', gap: 12, textAlign: 'center', padding: '0 32px',
     }}>
       <div style={{ fontSize: 40, opacity: 0.3 }}>{I.receipt(40)}</div>
-      <div className="h-display-th" style={{ fontSize: 18, color: 'var(--ink-2)' }}>ไม่พบออเดอร์</div>
+      <div className="h-display-th" style={{ fontSize: 18, color: 'var(--ink-2)' }}>{tLocal('track.notFound')}</div>
       <div style={{ fontSize: 13, color: 'var(--ink-3)' }}>#{orderId.slice(0, 8)}</div>
       <button
         onClick={() => navigate('/')}
@@ -110,7 +111,7 @@ function OrderNotFound({ orderId }: { orderId: string }) {
           border: 0, padding: '12px 24px', borderRadius: 'var(--r-pill)',
           fontWeight: 600, fontSize: 13,
         }}
-      >กลับหน้าแรก</button>
+      >{tLocal('track.backHome')}</button>
     </div>
   );
 }
@@ -557,7 +558,7 @@ export default function Track() {
             <div style={{ padding: '8px 0' }}>
               {orderItems.length === 0 ? (
                 <div style={{ padding: '24px 18px', fontSize: 13, color: 'var(--ink-3)', textAlign: 'center' }}>
-                  ไม่มีข้อมูลรายการ
+                  {t('track.noItems')}
                 </div>
               ) : (
                 orderItems.map((it, i) => (
@@ -697,12 +698,16 @@ function heroConfig(status: string, t: (key: keyof Dict, ...args: any[]) => stri
 
 /* ── Document title ───────────────────────────────────────── */
 function statusDocTitle(status: string, lang: 'th' | 'en'): string {
-  const titles: Record<string, { th: string; en: string }> = {
-    awaiting_payment: { th: 'รอชำระเงิน',        en: 'Awaiting payment'  },
-    pending:          { th: 'ร้านรับออเดอร์แล้ว', en: 'Order received'    },
-    preparing:        { th: 'ครัวกำลังทำ',        en: 'Making your meal'  },
-    ready:            { th: 'พร้อมให้รับแล้ว',    en: 'Ready for pickup'  },
-    completed:        { th: 'รับแล้ว',             en: 'Order collected'   },
+  const d = DICT[lang];
+  const map: Record<string, keyof typeof d> = {
+    awaiting_payment: 'track.awaitingHeadline',
+    pending:          'track.pendingHeadline',
+    preparing:        'track.preparingHeadline',
+    ready:            'track.readyHeadline',
+    completed:        'track.completedHeadline',
   };
-  return titles[status]?.[lang] ?? (lang === 'en' ? 'Your order' : 'ออเดอร์ของคุณ');
+  const key = map[status];
+  if (!key) return d['track.title'] as string;
+  const val = d[key];
+  return typeof val === 'string' ? val : (d['track.title'] as string);
 }

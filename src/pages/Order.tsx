@@ -551,7 +551,7 @@ export default function Order() {
                             padding: '2px 8px', borderRadius: 'var(--r-pill)',
                             background: 'rgba(184,134,46,0.14)',
                             color: 'var(--gold)',
-                          }}>แนะนำ</span>
+                          }}>{t('menu.badge.best')}</span>
 
                           <div style={{
                             fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 500,

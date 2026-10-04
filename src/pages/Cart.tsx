@@ -131,7 +131,7 @@ export default function Cart() {
       name: drink.name_th, nameEn: drink.name_en,
       tone: 'clay', topping: 'egg', imageUrl: drink.image_url ?? undefined,
       basePrice: drink.base_price, sizeLabel: '', sizePrice: 0,
-      spice: '', addons: [], qty: 1, isDrink: true,
+      spice: '', addons: [], optionIds: [], qty: 1, isDrink: true,
     });
   }
   function decDrink(drink: DrinkItem) {
@@ -472,7 +472,6 @@ export default function Cart() {
               <span>{t('cart.condimentsChip')}</span>
             </button>
           </div>
-          {/* TODO(session3): send cutlery/condiments to orders INSERT */}
         </motion.div>
       )}
 
@@ -533,7 +532,6 @@ export default function Cart() {
         <div style={{ marginTop: 2, fontSize: 10, color: 'var(--ink-3)' }}>
           {t('cart.kitchenNoteSmall')}
         </div>
-        {/* TODO(session3/4): trim and escape kitchen note before sending to DB/Telegram */}
       </motion.div>
 
       {/* ── 5. Total ─────────────────────────────────────────── */}

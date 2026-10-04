@@ -243,6 +243,17 @@ export const EN: Dict = {
   'orders.status.ready':      'Ready',
   'orders.status.completed':  'Collected',
 
+  // ── Order errors (create-order) ───────────────────────────
+  'order.error.shop_closed':         "We're not taking orders right now.",
+  'order.error.too_late':            'Orders are closed for today.',
+  'order.error.item_unavailable':    'An item in your bag is unavailable right now. Please check your bag.',
+  'order.error.option_unavailable':  'Some options are unavailable. Please update your item.',
+  'order.error.price_changed':       'Prices have changed. Please review your total.',
+  'order.error.invalid_pickup_time': "That pickup time isn't available. Please choose another.",
+  'order.error.invalid_phone':       "That phone number doesn't look right.",
+  'order.error.rate_limited':        'Too many attempts. Please wait a moment and try again.',
+  'order.error.fallback':            "We couldn't place your order. Please try again.",
+
   // ── Shop status ───────────────────────────────────────────
   'shop.forcedClosed': (date: string, time: string) => `Temporarily closed · Reopening ${date} ${time}`,
 };

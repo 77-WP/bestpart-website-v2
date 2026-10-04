@@ -246,6 +246,17 @@ export const TH = {
   'orders.status.ready':      'พร้อมรับแล้ว',
   'orders.status.completed':  'รับแล้ว',
 
+  // ── Order errors (create-order) ───────────────────────────
+  'order.error.shop_closed':         'ตอนนี้ร้านยังไม่เปิดรับออเดอร์ครับ',
+  'order.error.too_late':            'ปิดรับออเดอร์ช่วงนี้แล้วครับ',
+  'order.error.item_unavailable':    'มีเมนูในตะกร้าที่หมดชั่วคราวครับ กรุณาตรวจตะกร้าอีกครั้ง',
+  'order.error.option_unavailable':  'ตัวเลือกบางอย่างหมดชั่วคราวครับ กรุณาปรับเมนูอีกครั้ง',
+  'order.error.price_changed':       'ราคามีการเปลี่ยนแปลง กรุณาตรวจยอดอีกครั้งครับ',
+  'order.error.invalid_pickup_time': 'เวลารับที่เลือกไม่ถูกต้อง กรุณาเลือกใหม่ครับ',
+  'order.error.invalid_phone':       'เบอร์โทรไม่ถูกต้องครับ',
+  'order.error.rate_limited':        'ทำรายการถี่เกินไป กรุณารอสักครู่แล้วลองใหม่ครับ',
+  'order.error.fallback':            'ส่งออเดอร์ไม่สำเร็จ กรุณาลองใหม่อีกครั้งครับ',
+
   // ── Shop status ───────────────────────────────────────────
   'shop.forcedClosed': (date: string, time: string) => `ปิดชั่วคราว · เปิดอีกครั้ง ${date} ${time}`,
 } as const;

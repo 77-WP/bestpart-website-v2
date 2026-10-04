@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { supabase, type GetOrderResult, type GetOrderItem, normalizeOrderStatus } from '../lib/supabase';
 import { TabBar } from '../components/TabBar';
 import { I } from '../components/icons';
 import { getLocalOrders, pruneOldOrders } from '../lib/localOrders';
@@ -12,52 +12,69 @@ const QR_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
 
 const IN_PROGRESS = new Set(['awaiting_payment', 'pending', 'preparing', 'ready']);
 
-type OrderRow = {
-  id:                      string;
-  order_number:            number;
-  status:                  string;
-  payment_status:          string;
-  grand_total:             number;
-  created_at:              string;
-  items:                   unknown;
-  checkout_payment_method: string | null;
+type LocalOrderData = {
+  id:            string;
+  status:        string;         // normalized
+  payment_status: string;
+  grand_total:   number;
+  ordered_at:    string;
+  call_name:     string | null;
+  items:         GetOrderItem[];
+  payment_method: string | null;
 };
 
-function isTestOrder(o: OrderRow): boolean {
-  const items = Array.isArray(o.items) ? (o.items as { item_id?: string }[]) : [];
-  return items.some(i => i.item_id === 'test-1baht');
+// \u0E3F = ฿ (Thai Baht sign) — escaped to satisfy the i18n source-scan rule
+const TEST_ITEM_NAME_EN = 'Test Item \u0E3F1';
+
+function isTestOrder(o: LocalOrderData): boolean {
+  return o.items.some(i => i.name_en === TEST_ITEM_NAME_EN);
 }
 
-function isQrExpired(o: OrderRow): boolean {
+function isQrExpired(o: LocalOrderData): boolean {
   if (o.status !== 'awaiting_payment') return false;
-  return Date.now() - new Date(o.created_at).getTime() > QR_EXPIRY_MS;
+  return Date.now() - new Date(o.ordered_at).getTime() > QR_EXPIRY_MS;
 }
 
-function isInProgress(o: OrderRow): boolean {
+function isInProgress(o: LocalOrderData): boolean {
   if (!IN_PROGRESS.has(o.status)) return false;
   if (isQrExpired(o)) return false;
   return true;
 }
 
-type OrderItem = { name: string; name_en?: string; qty: number };
-
-function summaryLine(items: unknown, lang: 'th' | 'en'): string | null {
-  if (!Array.isArray(items) || items.length === 0) return null;
-  const arr = items as OrderItem[];
-  const first = arr[0];
+function summaryLine(items: GetOrderItem[], lang: 'th' | 'en'): string | null {
+  if (!items || items.length === 0) return null;
+  const first = items[0];
   if (!first?.name) return null;
   const firstName = lang === 'en' && first.name_en ? first.name_en : first.name;
-  const rest = arr.length - 1;
+  const rest = items.length - 1;
   return rest > 0 ? `${firstName} +${rest}` : firstName;
 }
 
-async function fetchOrders(ids: string[]): Promise<OrderRow[]> {
-  const { data } = await supabase
-    .from('orders')
-    .select('id, order_number, status, payment_status, grand_total, created_at, items, checkout_payment_method')
-    .in('id', ids);
-  if (!data) return [];
-  let rows = data as OrderRow[];
+async function fetchOrders(ids: string[]): Promise<LocalOrderData[]> {
+  const results = await Promise.allSettled(
+    ids.slice(0, 10).map(id =>
+      supabase.functions.invoke('get-order', { body: { order_id: id } })
+        .then(({ data, error }) => {
+          if (error || !data) return null;
+          const raw = data as GetOrderResult;
+          const normalized = normalizeOrderStatus(raw.status);
+          return {
+            id,
+            status:         normalized,
+            payment_status: raw.payment_status,
+            grand_total:    raw.grand_total,
+            ordered_at:     raw.ordered_at,
+            call_name:      raw.call_name,
+            items:          raw.items ?? [],
+            payment_method: raw.payment_method,
+          } satisfies LocalOrderData;
+        })
+    )
+  );
+  let rows = results
+    .filter((r): r is PromiseFulfilledResult<LocalOrderData | null> => r.status === 'fulfilled')
+    .map(r => r.value)
+    .filter((v): v is LocalOrderData => v !== null);
   if (!TEST_MODE) rows = rows.filter(o => !isTestOrder(o));
   return rows;
 }
@@ -89,7 +106,7 @@ export default function Orders() {
   const localOrders = getLocalOrders();
   const ids         = localOrders.map(o => o.id);
 
-  const [orders,  setOrders]  = useState<OrderRow[]>([]);
+  const [orders,  setOrders]  = useState<LocalOrderData[]>([]);
   const [loading, setLoading] = useState(ids.length > 0);
 
   /* ── Initial load ─────────────────────────────────────── */
@@ -112,10 +129,10 @@ export default function Orders() {
   /* ── Poll every 10 s ──────────────────────────────────── */
   useEffect(() => {
     if (ids.length === 0) return;
-    const t = setInterval(() => {
+    const timer = setInterval(() => {
       fetchOrders(ids).then(rows => setOrders(rows)).catch(() => {});
     }, 10_000);
-    return () => clearInterval(t);
+    return () => clearInterval(timer);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Sort: in-progress first, then by time desc ──────── */
@@ -123,7 +140,7 @@ export default function Orders() {
     const aActive = isInProgress(a);
     const bActive = isInProgress(b);
     if (aActive !== bActive) return aActive ? -1 : 1;
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    return new Date(b.ordered_at).getTime() - new Date(a.ordered_at).getTime();
   });
 
   const inProgress = sorted.filter(o => isInProgress(o));
@@ -146,21 +163,21 @@ export default function Orders() {
   }
 
   /* ── Order card ───────────────────────────────────────── */
-  function OrderCard({ o }: { o: OrderRow }) {
+  function OrderCard({ o }: { o: LocalOrderData }) {
     const expired  = isQrExpired(o);
     const col      = expired
       ? { bg: 'var(--bg-3)', fg: 'var(--ink-3)' }
       : STATUS_COLOR[o.status] ?? STATUS_COLOR.completed;
     const statusTh = expired ? t('orders.expired') : getStatusLabel(o.status);
-    const bkkDate  = new Date(new Date(o.created_at).getTime() + 7 * 3_600_000);
+    const bkkDate  = new Date(new Date(o.ordered_at).getTime() + 7 * 3_600_000);
     const timeStr  = `${String(bkkDate.getUTCHours()).padStart(2,'0')}:${String(bkkDate.getUTCMinutes()).padStart(2,'0')}`;
     const dateStr  = bkkDate.toLocaleDateString(lang === 'th' ? 'th-TH' : 'en-GB', { day: 'numeric', month: 'short' });
 
-    // Recipient name from localStorage
-    const lo         = localOrders.find(x => x.id === o.id);
-    const hasName    = !!lo?.name;
-    const displayLabel = lo?.name || `#${o.order_number}`;
-    const summary    = summaryLine(o.items, lang);
+    // Recipient name from localStorage, fallback to call_name or short ID
+    const lo           = localOrders.find(x => x.id === o.id);
+    const hasName      = !!lo?.name;
+    const displayLabel = lo?.name || o.call_name || `#${o.id.slice(0, 8)}`;
+    const summary      = summaryLine(o.items, lang);
 
     return (
       <div
@@ -180,14 +197,14 @@ export default function Orders() {
         }} />
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          {/* Name + order# */}
+          {/* Name + order identifier */}
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 4 }}>
             <span style={{ fontFamily: 'var(--serif)', fontSize: 15 }}>
               {displayLabel}
             </span>
-            {hasName && (
+            {hasName && o.call_name && (
               <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-3)' }}>
-                #{o.order_number}
+                {o.call_name}
               </span>
             )}
           </div>

@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useT } from '../i18n';
+import type { GetOrderResult } from '../lib/supabase';
 import { I } from '../components/icons';
 import { TEST_MODE } from '../config/env';
 
@@ -40,9 +41,8 @@ export default function Pay() {
   const { t }       = useT();
 
   const [state, setState]         = useState<QrState>({ phase: 'loading' });
-  const [orderNum, setOrderNum]   = useState<number | null>(null);
+  const [callName, setCallName]   = useState<string | null>(null);
   const [showQrOverlay, setShowQrOverlay] = useState(false);
-  const pollingRef   = useRef<ReturnType<typeof setInterval> | null>(null);
   const paidRef      = useRef(false);
   const qrFileRef    = useRef<File | null>(null);
   const [qrFileReady, setQrFileReady] = useState(false);
@@ -60,7 +60,6 @@ export default function Pay() {
   const handlePaid = useCallback(() => {
     if (paidRef.current) return;
     paidRef.current = true;
-    if (pollingRef.current) clearInterval(pollingRef.current);
     setShowSuccess(true);
     successTimerRef.current = setTimeout(() => {
       navigate(`/track/${orderId}`, { replace: true });
@@ -121,12 +120,24 @@ export default function Pay() {
   /* Initial QR load */
   useEffect(() => { fetchQr(); }, [fetchQr]);
 
-  /* Fetch order number for display */
+  /* Poll get-order every 5s: fetch call_name on first hit, check payment_status */
   useEffect(() => {
     if (!orderId) return;
-    supabase.from('orders').select('order_number').eq('id', orderId).single()
-      .then(({ data }) => { if (data?.order_number) setOrderNum(data.order_number); });
-  }, [orderId]);
+    let stopped = false;
+
+    async function poll() {
+      if (stopped) return;
+      const { data } = await supabase.functions.invoke('get-order', { body: { order_id: orderId } });
+      if (stopped || !data) return;
+      const row = data as GetOrderResult;
+      if (row.call_name) setCallName(prev => prev ?? row.call_name);
+      if (row.payment_status === 'paid') handlePaid();
+    }
+
+    poll();
+    const interval = setInterval(poll, 5000);
+    return () => { stopped = true; clearInterval(interval); };
+  }, [orderId, handlePaid]);
 
   /* Mark expired */
   useEffect(() => {
@@ -159,33 +170,6 @@ export default function Pay() {
     img.src = `data:image/png;base64,${qrBase64}`;
   }, [qrBase64]);
 
-  /* Realtime subscription */
-  useEffect(() => {
-    if (!orderId) return;
-    const channel = supabase
-      .channel(`pay-order-${orderId}`)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` },
-        (payload) => {
-          const rec = payload.new as { payment_status?: string };
-          if (rec.payment_status === 'paid') handlePaid();
-        }
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [orderId, handlePaid]);
-
-  /* Polling fallback every 5 s */
-  useEffect(() => {
-    if (!orderId) return;
-    pollingRef.current = setInterval(async () => {
-      const { data } = await supabase
-        .from('orders').select('payment_status').eq('id', orderId).single();
-      if (data?.payment_status === 'paid') handlePaid();
-    }, 5000);
-    return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
-  }, [orderId, handlePaid]);
 
   /* ── Save QR ──────────────────────────────────────────────  */
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'hint'>('idle');
@@ -243,9 +227,7 @@ export default function Pay() {
   const displaySecs = countdown !== null ? countdown % 60 : 0;
   const nearExpiry  = countdown !== null && countdown < 300; // < 5 min
 
-  const orderNumStr = orderNum != null
-    ? String(orderNum)
-    : orderId?.slice(-4).toUpperCase() ?? '';
+  const orderNumStr = callName ?? orderId?.slice(-4).toUpperCase() ?? '';
 
   /* ── QR size: ~70% of max-width (480) ──────────────────── */
   const QR_SIZE = 280;

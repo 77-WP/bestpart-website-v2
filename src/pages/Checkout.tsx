@@ -86,7 +86,7 @@ function makeShopInfo(): ShopStatus {
 /* ── Component ───────────────────────────────────────────── */
 export default function Checkout() {
   const navigate       = useNavigate();
-  const { items, clear } = useCart();
+  const { items, clear, cutlery, condiments, kitchenNote } = useCart();
   const { t, lang }    = useT();
 
   /* ── Method — null = not yet chosen this session ───────── */
@@ -215,7 +215,10 @@ export default function Checkout() {
     : shopInfo.slots.find(s => s.value === selSlot) ?? null;
 
   /* ── Submit ──────────────────────────────────────────────  */
+  const IDEM_KEY = 'bp_idem_key';
+
   async function handleConfirm() {
+    if (loading) return;
     setNameTouched(true);
     setPhoneTouched(true);
     setSubmitHint(null);
@@ -270,65 +273,86 @@ export default function Checkout() {
     setLoading(true);
     setError(null);
 
-    const orderItems = items.map(it => ({
-      name:       it.name,
-      name_en:    it.nameEn,
-      item_id:    it.itemId,
-      qty:        it.qty,
-      unit_price: itemTotal(it) / it.qty,
-      total:      itemTotal(it),
-      size:       it.sizeLabel,
-      spice:      it.spice,
-      addons:     it.addons,
-    }));
+    // Idempotency key — create once per order attempt, reuse on retry, clear on success
+    let idempotencyKey = sessionStorage.getItem(IDEM_KEY);
+    if (!idempotencyKey) {
+      idempotencyKey = crypto.randomUUID();
+      sessionStorage.setItem(IDEM_KEY, idempotencyKey);
+    }
 
     const isBeam = payment === 'promptpay';
 
-    // Sanitize: only accept "HH:MM" — anything else → null
-    const rawPickup  = selSlot ?? null;
-    const pickupTime = rawPickup && /^\d{2}:\d{2}(:\d{2})?$/.test(rawPickup) ? rawPickup : null;
+    const pickupTime = selSlot === null ? 'asap' : selSlot;
 
-    // TODO(curbside): include vehicle details in order when ready
-    const insertPayload = {
-      items:                   orderItems,
-      subtotal:                subtotal,
-      discount_amount:         0,
-      delivery_fee:            0,
-      grand_total:             total,
-      status:                  isBeam ? 'awaiting_payment' : 'pending',
-      payment_status:          'pending',
-      fulfillment_type:        FULFILLMENT_MAP[method] ?? 'takeaway',
-      checkout_payment_method: isBeam ? 'promptpay' : 'cash',
-      internal_notes:          isBeam ? null : 'จ่ายที่ร้าน',
-      pickup_time:             pickupTime,
-      source:                  'web',
+    const vehiclePayload = (isCurbside && vehicleColor)
+      ? {
+          color: vehicleColor === 'other' ? sanitizeVehicleText(colorOtherText) : vehicleColor,
+          ...(vehicleBrand
+            ? { brand: vehicleBrand === BRAND_OTHER_ID ? sanitizeVehicleText(brandOtherText) : vehicleBrand }
+            : {}),
+        }
+      : undefined;
+
+    const body = {
+      idempotency_key:  idempotencyKey,
+      fulfillment_type: FULFILLMENT_MAP[method] ?? 'takeaway',
+      payment_method:   isBeam ? 'promptpay' : 'cash',
+      pickup_time:      pickupTime,
+      name:             name.trim(),
+      phone:            digitsOnly(phone),
+      customer_note:    stripControl(kitchenNote),
+      cutlery,
+      condiments,
+      ...(vehiclePayload ? { vehicle: vehiclePayload } : {}),
+      expected_total:   total,
+      items:            items.map(it => ({
+        item_id:    it.itemId,
+        qty:        it.qty,
+        option_ids: it.optionIds,
+      })),
     };
 
-    if (TEST_MODE) console.log('[INSERT orders] payload:', insertPayload);
+    if (TEST_MODE) console.log('[create-order] payload:', body);
 
-    const { data, error: dbError } = await supabase
-      .from('orders')
-      .insert(insertPayload)
-      .select('id')
-      .single();
+    const { data, error: fnError } = await supabase.functions.invoke('create-order', { body });
 
-    if (dbError || !data) {
-      console.error('[INSERT orders] failed:', {
-        message: dbError?.message,
-        code:    dbError?.code,
-        details: dbError?.details,
-        hint:    dbError?.hint,
-      });
+    const result = data as { order_id?: string } | null;
+
+    if (fnError || !result?.order_id) {
+      let code = 'fallback';
+      if (fnError) {
+        try {
+          const ctx = (fnError as unknown as { context?: unknown }).context;
+          const parsed: unknown = typeof ctx === 'string'
+            ? JSON.parse(ctx)
+            : typeof (ctx as { body?: string })?.body === 'string'
+              ? JSON.parse((ctx as { body: string }).body)
+              : ctx;
+          const errCode = (parsed as { error?: string })?.error;
+          if (errCode) code = errCode;
+        } catch { /* ignore parse error */ }
+      }
+      if (TEST_MODE) console.error('[create-order] failed, code:', code, fnError);
       setLoading(false);
-      setError(
-        TEST_MODE && dbError
-          ? `[INSERT orders] ${dbError.message}${dbError.code ? ` / ${dbError.code}` : ''}`
-          : t('checkout.orderError')
-      );
+      const errorMsg = (() => {
+        switch (code) {
+          case 'shop_closed':         return t('order.error.shop_closed');
+          case 'too_late':            return t('order.error.too_late');
+          case 'item_unavailable':    return t('order.error.item_unavailable');
+          case 'option_unavailable':  return t('order.error.option_unavailable');
+          case 'price_changed':       return t('order.error.price_changed');
+          case 'invalid_pickup_time': return t('order.error.invalid_pickup_time');
+          case 'invalid_phone':       return t('order.error.invalid_phone');
+          case 'rate_limited':        return t('order.error.rate_limited');
+          default:                    return t('order.error.fallback');
+        }
+      })();
+      setError(errorMsg);
       return;
     }
 
-    const orderId = data.id;
+    const orderId = result.order_id;
+    sessionStorage.removeItem(IDEM_KEY);
     saveLocalOrder(orderId, new Date().toISOString(), name.trim());
 
     // Save contact only if user opted in
@@ -353,17 +377,6 @@ export default function Checkout() {
         localStorage.removeItem(VEHICLE_KEY);
       }
     }
-
-    /* INSERT order_contacts — fail silently */
-    supabase
-      .from('order_contacts')
-      .insert({ order_id: orderId, name: name.trim(), phone: digitsOnly(phone) })
-      .then(({ error: contactErr }) => {
-        if (contactErr) console.error('[INSERT order_contacts] failed:', {
-          message: contactErr.message, code: contactErr.code,
-          details: contactErr.details, hint: contactErr.hint,
-        });
-      });
 
     clear();
 
@@ -912,6 +925,7 @@ export default function Checkout() {
         )}
         <button
           onClick={handleConfirm}
+          disabled={loading}
           style={{
             width: '100%',
             background: 'var(--accent)',

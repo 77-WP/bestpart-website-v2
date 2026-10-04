@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { supabase, normalizeOrderStatus } from '../lib/supabase';
 import { getLocalOrderIds } from '../lib/localOrders';
 import { I } from './icons';
 import { useT } from '../i18n';
@@ -16,13 +16,18 @@ function useHasActiveOrders(override?: boolean): boolean {
     if (override !== undefined) { setHasActive(override); return; }
     const ids = getLocalOrderIds();
     if (ids.length === 0) return;
-    supabase
-      .from('orders')
-      .select('id')
-      .in('id', ids)
-      .in('status', ACTIVE_STATUSES)
-      .limit(1)
-      .then(({ data }) => { setHasActive((data?.length ?? 0) > 0); }, () => { /* fail silently */ });
+    Promise.allSettled(
+      ids.slice(0, 10).map(id =>
+        supabase.functions.invoke('get-order', { body: { order_id: id } })
+          .then(({ data, error }) => {
+            if (error || !data) return false;
+            return ACTIVE_STATUSES.includes(normalizeOrderStatus((data as { status: string }).status));
+          })
+      )
+    ).then(results => {
+      const anyActive = results.some(r => r.status === 'fulfilled' && r.value === true);
+      setHasActive(anyActive);
+    });
   }, [override]);
 
   return hasActive;

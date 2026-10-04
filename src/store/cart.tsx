@@ -13,6 +13,7 @@ export type CartItem = {
   sizePrice: number;
   spice: string;
   addons: { label: string; price: number }[];
+  optionIds: string[];  // UUIDs of every selected option (size, spice, personalisation, extras)
   qty: number;
   isDrink?: boolean;    // true for items added from the drinks rail
 };

@@ -309,7 +309,7 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
     });
   }
 
-  /* ── Build cart item (structure unchanged) ────────────────── */
+  /* ── Build cart item ─────────────────────────────────────── */
   function buildCartItem(): CartItem {
     const sizeGroup  = step1Groups.find(isSizeGroup);
     const spiceGroup = step1Groups.find(isSpiceGroup);
@@ -318,12 +318,21 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
     const spiceOpt = spiceGroup ? spiceGroup.options.find(o => isSelected(spiceGroup.id, o.id)) : undefined;
 
     const addons: { label: string; price: number }[] = [];
+    const optionIds: string[] = [];
+
+    // Size and spice go into optionIds (display stays in sizeLabel/spice)
+    if (sizeOpt)  optionIds.push(sizeOpt.id);
+    if (spiceOpt) optionIds.push(spiceOpt.id);
+
     for (const g of groups) {
       if (isHiddenGroup(g)) continue;
       if (g.id === sizeGroup?.id || g.id === spiceGroup?.id) continue;
       for (const optId of selections[g.id] ?? []) {
         const opt = g.options.find(o => o.id === optId);
-        if (opt) addons.push({ label: opt.option_name_th, price: opt.price_adjustment });
+        if (opt) {
+          addons.push({ label: opt.option_name_th, price: opt.price_adjustment });
+          optionIds.push(optId);
+        }
       }
     }
 
@@ -340,6 +349,7 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
       sizePrice: sizeOpt?.price_adjustment ?? 0,
       spice:     spiceOpt?.option_name_th ?? '',
       addons,
+      optionIds,
       qty,
     };
   }

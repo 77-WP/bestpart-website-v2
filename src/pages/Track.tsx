@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase, type OrderRow } from '../lib/supabase';
+import { supabase, type GetOrderResult, type GetOrderItem, normalizeOrderStatus } from '../lib/supabase';
 import { TabBar } from '../components/TabBar';
 import { I } from '../components/icons';
 import { SHOP } from '../config/shop';
@@ -10,55 +10,23 @@ import { useT, DICT } from '../i18n';
 import type { Dict } from '../i18n';
 import { getLocalOrders } from '../lib/localOrders';
 
-/* ── Recipient label — single point to swap for daily code ── */
-export function getPickupLabel(orderId: string, orderNumber: number): string {
-  const lo = getLocalOrders().find(o => o.id === orderId);
-  if (lo?.name) return lo.name;
-  return `#${orderNumber}`;
-}
-
 /* ── Bangkok time (UTC+7) — never uses system timezone ──────── */
 function toBkkHHMM(date: Date): string {
   const bkk = new Date(date.getTime() + 7 * 3_600_000);
   return `${String(bkk.getUTCHours()).padStart(2, '0')}:${String(bkk.getUTCMinutes()).padStart(2, '0')}`;
 }
 
-/* ── ETA from pickup_time or created_at + prepMinutes ────────── */
-function calcEta(order: OrderRow): { hhmm: string; minsLeft: number } | null {
+/* ── ETA from requested_ready_at or ordered_at + prepMinutes ── */
+function calcEta(order: GetOrderResult): { hhmm: string; minsLeft: number } | null {
   let etaMs: number;
-
-  if (order.pickup_time) {
-    const parts = order.pickup_time.split(':');
-    const bkkHH = parseInt(parts[0], 10);
-    const bkkMM = parseInt(parts[1] ?? '0', 10);
-    if (isNaN(bkkHH) || isNaN(bkkMM)) return null;
-    // Build ETA in UTC from Bangkok HH:MM today
-    const bkkNow = new Date(Date.now() + 7 * 3_600_000);
-    etaMs = Date.UTC(
-      bkkNow.getUTCFullYear(), bkkNow.getUTCMonth(), bkkNow.getUTCDate(),
-      bkkHH - 7, bkkMM, 0,
-    );
+  if (order.requested_ready_at) {
+    etaMs = new Date(order.requested_ready_at).getTime();
   } else {
-    etaMs = new Date(order.created_at).getTime() + SHOP.prepMinutes * 60_000;
+    etaMs = new Date(order.ordered_at).getTime() + SHOP.prepMinutes * 60_000;
   }
-
   const minsLeft = Math.max(0, Math.round((etaMs - Date.now()) / 60_000));
   return { hhmm: toBkkHHMM(new Date(etaMs)), minsLeft };
 }
-
-/* ── Item type saved in orders.items jsonb ──────────────────── */
-type OrderItem = {
-  name:     string;
-  name_en?: string;
-  item_id?: string;
-  qty:      number;
-  total:    number;
-  size?:    string;
-  spice?:   string;
-  addons?:  { label: string; price: number }[];
-  tone?:    string;
-  topping?: string;
-};
 
 /* ── Step index mapping for progress bar ──────────────────── */
 const BAR_STEP: Record<string, number> = {
@@ -122,7 +90,7 @@ export default function Track() {
   const navigate      = useNavigate();
   const { t, lang, dict } = useT();
 
-  const [order,    setOrder]    = useState<OrderRow | null>(null);
+  const [order,    setOrder]    = useState<(GetOrderResult & { status: string }) | null>(null);
   const [loading,  setLoading]  = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [sheetVisible, setSheetVisible] = useState(false);
@@ -133,46 +101,63 @@ export default function Track() {
   const reducedMotion = typeof window !== 'undefined' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  /* ── Initial fetch ────────────────────────────────────── */
+  /* ── Polling (replaces initial fetch + realtime) ─────────── */
   useEffect(() => {
     if (!orderId) { setLoading(false); setNotFound(true); return; }
+    let stopped = false;
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
 
-    supabase
-      .from('orders')
-      .select('id, status, items, grand_total, subtotal, discount_amount, fulfillment_type, checkout_payment_method, order_number, created_at, pickup_time')
-      .eq('id', orderId)
-      .single()
-      .then(({ data, error }) => {
-        setLoading(false);
-        if (error || !data) { setNotFound(true); return; }
-        setOrder(data as OrderRow);
-        prevStatus.current = data.status;
-        document.title = statusDocTitle(data.status, lang as 'th' | 'en');
+    async function poll() {
+      if (stopped) return;
+      const { data, error } = await supabase.functions.invoke('get-order', {
+        body: { order_id: orderId },
       });
-  }, [orderId]); // eslint-disable-line react-hooks/exhaustive-deps
+      if (stopped) return;
+      if (error || !data) {
+        if (loading) { setLoading(false); setNotFound(true); }
+        return;
+      }
+      const raw = data as GetOrderResult;
+      const normalized = normalizeOrderStatus(raw.status);
+      if (normalized !== prevStatus.current) {
+        prevStatus.current = normalized;
+        setAnimKey(k => k + 1);
+        document.title = statusDocTitle(normalized, lang as 'th' | 'en');
+      }
+      setOrder({ ...raw, status: normalized });
+      setLoading(false);
+      // Stop polling on terminal status
+      if (normalized === 'completed' || normalized === 'cancelled') {
+        stopped = true;
+        if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+      }
+    }
 
-  /* ── Realtime subscription ────────────────────────────── */
-  useEffect(() => {
-    if (!orderId) return;
-    const ch = supabase
-      .channel(`order-${orderId}`)
-      .on('postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` },
-        (payload) => {
-          setOrder(prev => {
-            if (!prev) return prev;
-            const updated = { ...prev, ...(payload.new as Partial<OrderRow>) };
-            const newStatus = updated.status ?? prev.status;
-            if (newStatus !== prevStatus.current) {
-              prevStatus.current = newStatus;
-              setAnimKey(k => k + 1);
-              document.title = statusDocTitle(newStatus, lang as 'th' | 'en');
-            }
-            return updated;
-          });
-        })
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
+    function startInterval() {
+      if (stopped || pollInterval) return;
+      pollInterval = setInterval(poll, 5000);
+    }
+    function stopInterval() {
+      if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+    }
+    function handleVisibility() {
+      if (document.visibilityState === 'hidden') {
+        stopInterval();
+      } else {
+        poll();
+        startInterval();
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    poll();
+    startInterval();
+
+    return () => {
+      stopped = true;
+      stopInterval();
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [orderId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Sheet helpers ────────────────────────────────────── */
@@ -190,32 +175,28 @@ export default function Track() {
 
   const status   = order.status ?? 'pending';
   const stepIdx  = BAR_STEP[status] ?? -1;
-  const isCash   = order.checkout_payment_method === 'cash';
+  const isCash   = order.payment_method === 'cash';
   const isReady  = status === 'ready';
   const isDone   = status === 'completed';
 
   /* ── Items ────────────────────────────────────────────── */
-  const orderItems: OrderItem[] = (Array.isArray(order.items)
-    ? (order.items as OrderItem[])
-    : []
-  ).filter(it => TEST_MODE || it.item_id !== 'test-1baht');
+  const orderItems: GetOrderItem[] = (order.items ?? [])
+    .filter(it => TEST_MODE || it.name !== 'ทดสอบ ฿1');
 
   /* ── Recipient label ──────────────────────────────────── */
-  const label = getPickupLabel(order.id, order.order_number);
+  const lo = getLocalOrders().find(o => o.id === orderId);
+  const label = lo?.name ?? order.call_name ?? `#${orderId!.slice(0, 8)}`;
   const labelIsName = !label.startsWith('#');
 
   /* ── ETA line ─────────────────────────────────────────── */
   const eta     = calcEta(order);
   const showEta = status === 'pending' || status === 'preparing';
 
-  /* ── Created time ─────────────────────────────────────── */
-  const createdHHMM = toBkkHHMM(new Date(order.created_at));
-
   /* ── Customer name from localStorage ─────────────────── */
-  const customerName = (() => {
-    const lo = getLocalOrders().find(o => o.id === order.id);
-    return lo?.name ?? '';
-  })();
+  const customerName = lo?.name ?? '';
+
+  /* ── Created time ─────────────────────────────────────── */
+  const createdHHMM = toBkkHHMM(new Date(order.ordered_at));
 
   /* ── Hero config ──────────────────────────────────────── */
   const hero = heroConfig(status, t, customerName);
@@ -304,7 +285,7 @@ export default function Track() {
         {/* Awaiting payment — go to pay button */}
         {status === 'awaiting_payment' && (
           <button
-            onClick={() => navigate(`/pay/${order.id}`)}
+            onClick={() => navigate(`/pay/${orderId}`)}
             style={{
               marginTop: 18, background: 'var(--gold)', color: '#fff',
               border: 0, padding: '13px 28px', borderRadius: 'var(--r-pill)',
@@ -405,14 +386,14 @@ export default function Track() {
           {t('track.showToStaff').toUpperCase()}
         </div>
 
-        {/* Recipient name / order number */}
+        {/* Recipient name / order identifier */}
         <div style={{
           fontFamily: 'var(--serif)',
           fontSize: labelIsName ? 28 : 22,
           lineHeight: 1.1,
           color: isDone ? 'var(--ink-2)' : '#FBF3E3',
         }}>
-          {labelIsName ? label : label}
+          {label}
         </div>
         {labelIsName && (
           <div style={{
@@ -420,7 +401,7 @@ export default function Track() {
             color: isDone ? 'var(--ink-3)' : 'rgba(251,243,227,0.5)',
             marginTop: 2,
           }}>
-            #{order.order_number}
+            {order.call_name ?? `#${orderId!.slice(0, 8)}`}
           </div>
         )}
 
@@ -576,7 +557,7 @@ export default function Track() {
                         <ItemCustomSummary item={it} />
                       </div>
                       <div style={{ fontFamily: 'var(--mono)', fontSize: 13, flexShrink: 0 }}>
-                        ฿{it.total}
+                        ฿{it.line_total}
                       </div>
                     </div>
                   </div>
@@ -607,12 +588,11 @@ export default function Track() {
 }
 
 /* ── Item customization summary line ──────────────────────── */
-function ItemCustomSummary({ item }: { item: OrderItem }) {
+function ItemCustomSummary({ item }: { item: GetOrderItem }) {
   const parts: string[] = [];
-  if (item.size)  parts.push(item.size);
-  if (item.spice) parts.push(item.spice);
-  if (Array.isArray(item.addons)) {
-    item.addons.forEach(a => { if (a.label) parts.push(a.label); });
+  if (item.variant) parts.push(item.variant);
+  if (Array.isArray(item.modifiers)) {
+    item.modifiers.forEach(m => { if (m.name) parts.push(m.name); });
   }
   if (parts.length === 0) return null;
   return (

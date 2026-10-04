@@ -70,12 +70,13 @@ type Props = {
 ══════════════════════════════════════════════════════════ */
 export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { add }        = useCart();
+  const { add, replace, items } = useCart();
   const { lang }       = useLang();
   const T              = LANG_MAP[lang];
   const prefersReduced = useReducedMotion();
 
-  const itemId = searchParams.get('item');
+  const itemId    = searchParams.get('item');
+  const editCartId = searchParams.get('editCartId');
 
   const [item,         setItem]        = useState<MenuItemRow | null>(null);
   const [phase,        setPhase]       = useState<'loading' | 'ready' | 'not_found'>('loading');
@@ -179,11 +180,33 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
                 sel[g.id] = [];
               }
             }
+            /* Edit mode: override defaults with values from the cart item being edited */
+            const editTarget = editCartId ? items.find(i => i.cartId === editCartId) : undefined;
+            if (editTarget) {
+              setQty(editTarget.qty);
+              for (const g of loaded) {
+                if (isHiddenGroup(g)) continue;
+                if (isSizeGroup(g) && editTarget.sizeLabel) {
+                  const match = g.options.find(o => o.option_name_th === editTarget.sizeLabel);
+                  if (match) sel[g.id] = [match.id];
+                } else if (isSpiceGroup(g) && editTarget.spice) {
+                  const match = g.options.find(o => o.option_name_th === editTarget.spice);
+                  if (match) sel[g.id] = [match.id];
+                } else if (!isSizeGroup(g) && !isSpiceGroup(g)) {
+                  const matchedIds = editTarget.addons
+                    .map(a => g.options.find(o => o.option_name_th === a.label)?.id)
+                    .filter((id): id is string => id !== undefined);
+                  if (matchedIds.length > 0) sel[g.id] = matchedIds;
+                }
+              }
+            }
+
             setSelections(sel);
             setPhase('ready');
           });
       });
-  }, [itemId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemId, editCartId]);
 
   /* ── Derived group lists ─────────────────────────────────── */
   const visibleGroups = useMemo(() => groups.filter(g => !isHiddenGroup(g)), [groups]);
@@ -332,7 +355,11 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
       setTimeout(() => setClosedTapMsg(false), 3000);
       return;
     }
-    add(buildCartItem());
+    if (editCartId) {
+      replace(editCartId, buildCartItem());
+    } else {
+      add(buildCartItem());
+    }
     close();
   }
 

@@ -1,17 +1,22 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCart, cartTotal } from '../store/cart';
 import { I } from './icons';
 
 export function CartBar() {
   const { items } = useCart();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const count = items.reduce((s, i) => s + i.qty, 0);
   const total = cartTotal(items);
 
   if (count === 0) return null;
 
+  /* Preserve the current ?method= param so Cart can read it for cutlery visibility */
+  const method = searchParams.get('method');
+  const cartPath = method ? `/cart?method=${method}` : '/cart';
+
   return (
-    <div className="cart-bar" onClick={() => navigate('/cart')} style={{ cursor: 'pointer' }}>
+    <div className="cart-bar" onClick={() => navigate(cartPath)} style={{ cursor: 'pointer' }}>
       <span style={{
         width: 32, height: 32, borderRadius: '50%',
         background: 'var(--accent)', color: 'var(--on-accent)',

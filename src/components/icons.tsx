@@ -31,6 +31,7 @@ export const I = {
   chili:   (s=11) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5.5V4c0-.8 1.2-1.6 2-.8"/><path d="M9 10c0-2.5 1.3-4.5 3-4.5s3 2 3 4.5c0 4.5-1.3 8.5-3 9s-3-4.5-3-9z"/></svg>,
   garlic:  (s=12) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4c-4 0-6 2.5-6 6 0 4.5 2.5 7 6 7s6-2.5 6-7c0-3.5-2-6-6-6z"/><path d="M12 4v2.5"/><path d="M9.5 7c0 1.5 1 3 2.5 3s2.5-1.5 2.5-3"/></svg>,
   oil:     (s=12) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4l5 8a6 6 0 1 1-10 0z"/></svg>,
+  trash:   (s=18) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/><path d="M10 11v4M14 11v4"/></svg>,
   /* rice bowl — normal portion (moderate rice dome) */
   bowlMd:  (s=16) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 12c0-2.2 1.8-4 4-4s4 1.8 4 4"/><path d="M4 12h16"/><path d="M5 12a7 7 0 0 0 14 0"/></svg>,
   /* rice bowl — large portion (wider + taller rice dome, ~1.3× more rice) */

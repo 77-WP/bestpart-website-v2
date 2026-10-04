@@ -36,6 +36,25 @@ const TH = {
   /* Common */
   backToMenu:             'กลับไปเมนู',
   notAvailable:           'เมนูนี้ไม่มีขายตอนนี้',
+
+  /* ── Cart page ────────────────────────────────────────── */
+  cartItems:              (n: number) => `${n} รายการ`,
+  clearAll:               'ล้างทั้งหมด',
+  clearConfirmTitle:      'ล้างตะกร้า?',
+  clearConfirmMsg:        'รายการทั้งหมดจะถูกลบออก',
+  clearConfirmOk:         'ล้างเลย',
+  clearConfirmCancel:     'ยกเลิก',
+  cartEmptyMsg:           'เพิ่มเมนูที่ชอบจากหน้า Menu ก่อนนะ',
+  cartEmptyBtn:           'ดูเมนู',
+  editMyWay:              'แก้แบบของฉัน',
+  removedMsg:             'เอาออกแล้ว',
+  undoLabel:              'เลิกทำ',
+  totalLabel:             'ยอดรวม · TOTAL',
+  continueBtn:            (total: number) => `ไปต่อ · ฿${total}`,
+  drinksSection:          'เครื่องดื่ม',
+  cutlerySection:         'ช้อนส้อม & เครื่องปรุง',
+  cutleryLabel:           'ช้อนส้อม',
+  condimentsLabel:        'พริกน้ำปลา',
 };
 
 const EN: typeof TH = {
@@ -66,6 +85,25 @@ const EN: typeof TH = {
 
   backToMenu:             'Back to menu',
   notAvailable:           'This item isn\'t available right now',
+
+  /* ── Cart page ────────────────────────────────────────── */
+  cartItems:              (n: number) => `${n} item${n === 1 ? '' : 's'}`,
+  clearAll:               'Clear all',
+  clearConfirmTitle:      'Clear cart?',
+  clearConfirmMsg:        'All items will be removed',
+  clearConfirmOk:         'Clear',
+  clearConfirmCancel:     'Cancel',
+  cartEmptyMsg:           'Add your favourite dishes first',
+  cartEmptyBtn:           'See menu',
+  editMyWay:              'Edit My Way',
+  removedMsg:             'Removed',
+  undoLabel:              'Undo',
+  totalLabel:             'Total',
+  continueBtn:            (total: number) => `Continue · ฿${total}`,
+  drinksSection:          'Drinks',
+  cutlerySection:         'Cutlery & condiments',
+  cutleryLabel:           'Cutlery',
+  condimentsLabel:        'Chili fish sauce',
 };
 
 export const LANG_MAP = { th: TH, en: EN } as const;

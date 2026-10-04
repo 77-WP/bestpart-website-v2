@@ -316,7 +316,7 @@ export default function Checkout() {
     }
 
     const orderId = data.id;
-    saveLocalOrder(orderId, new Date().toISOString());
+    saveLocalOrder(orderId, new Date().toISOString(), name.trim());
 
     // Save contact for next visit (only on success)
     localStorage.setItem(CONTACT_KEY, JSON.stringify({ name: name.trim(), phone: digitsOnly(phone) }));

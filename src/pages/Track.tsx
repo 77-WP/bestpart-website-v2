@@ -1,373 +1,709 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase, STATUS_STEP, type OrderRow } from '../lib/supabase';
-import { Bowl } from '../components/Bowl';
+import { supabase, type OrderRow } from '../lib/supabase';
 import { TabBar } from '../components/TabBar';
 import { I } from '../components/icons';
-import { SHOP, shopCloseLabel } from '../config/shop';
+import { SHOP } from '../config/shop';
+import { LINKS } from '../config/links';
 import { TEST_MODE } from '../config/env';
+import { useLang } from '../store/lang';
+import { LANG_MAP, type LangDict } from '../config/lang';
+import { getLocalOrders } from '../lib/localOrders';
 
-/* ── Status → UI config ─────────────────────────────────── */
-const STATUS_UI: Record<string, { th: string; en: string; color: string; bg: string }> = {
-  awaiting_payment: { th: 'รอชำระเงิน',      en: 'AWAITING PAYMENT', color: 'var(--gold)',     bg: 'rgba(184,134,46,0.12)' },
-  pending:          { th: 'รับออเดอร์แล้ว',  en: 'ORDER RECEIVED',   color: 'var(--gold)',     bg: 'rgba(184,134,46,0.12)' },
-  preparing:        { th: 'กำลังเตรียม',     en: 'IN THE KITCHEN',   color: 'var(--accent-2)', bg: 'rgba(74,93,63,0.12)'   },
-  ready:            { th: 'พร้อมให้รับแล้ว', en: 'READY FOR PICKUP', color: 'var(--accent)',   bg: 'rgba(181,81,30,0.12)'  },
-  completed:        { th: 'รับเรียบร้อย',    en: 'PICKED UP',        color: 'var(--accent-2)', bg: 'rgba(74,93,63,0.12)'   },
-};
-
-const STEPS = [
-  { label: 'รับออเดอร์',   labelEn: 'Order placed',    status: 'pending'   },
-  { label: 'ครัวกำลังทำ',  labelEn: 'In the kitchen',  status: 'preparing' },
-  { label: 'พร้อมให้รับ',  labelEn: 'Ready for pickup', status: 'ready'     },
-  { label: 'รับเรียบร้อย', labelEn: 'Picked up',        status: 'completed' },
-];
-
-const ETA_BY_STATUS: Record<string, number> = {
-  pending:   12,
-  preparing: 7,
-  ready:     0,
-  completed: 0,
-};
-
-/* ── Pulse dot ───────────────────────────────────────────── */
-function PulseDot({ color }: { color: string }) {
-  const [on, setOn] = useState(true);
-  useEffect(() => {
-    const t = setInterval(() => setOn(v => !v), 800);
-    return () => clearInterval(t);
-  }, []);
-  return (
-    <span style={{
-      width: 6, height: 6, borderRadius: '50%', background: color,
-      opacity: on ? 1 : 0.3, transition: 'opacity 0.4s', display: 'inline-block',
-    }} />
-  );
+/* ── Recipient label — single point to swap for daily code ── */
+export function getPickupLabel(orderId: string, orderNumber: number): string {
+  const lo = getLocalOrders().find(o => o.id === orderId);
+  if (lo?.name) return lo.name;
+  return `#${orderNumber}`;
 }
 
-/* ── Countdown ring ──────────────────────────────────────── */
-function CountdownRing({ initialMin }: { initialMin: number }) {
-  const [secs, setSecs] = useState(initialMin * 60);
-  const initial = useRef(initialMin * 60);
-
-  useEffect(() => {
-    initial.current = initialMin * 60;
-    setSecs(initialMin * 60);
-  }, [initialMin]);
-
-  useEffect(() => {
-    if (secs <= 0) return;
-    const t = setInterval(() => setSecs(s => Math.max(0, s - 1)), 1000);
-    return () => clearInterval(t);
-  }, [secs]);
-
-  const radius = 54;
-  const circ = 2 * Math.PI * radius;
-  const progress = initial.current > 0 ? secs / initial.current : 0;
-  const dashOffset = circ * (1 - progress);
-  const mins = Math.floor(secs / 60);
-  const sec  = secs % 60;
-
-  return (
-    <div style={{ position: 'relative', display: 'inline-block', marginTop: 24 }}>
-      <svg width={132} height={132} style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx={66} cy={66} r={radius} fill="none" stroke="var(--line)" strokeWidth={6} />
-        <circle
-          cx={66} cy={66} r={radius} fill="none"
-          stroke="var(--accent)" strokeWidth={6} strokeLinecap="round"
-          strokeDasharray={circ} strokeDashoffset={dashOffset}
-          style={{ transition: 'stroke-dashoffset 1s linear' }}
-        />
-      </svg>
-      <div style={{
-        position: 'absolute', inset: 0,
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      }}>
-        <div style={{ fontSize: 11, color: 'var(--ink-3)', fontWeight: 600, letterSpacing: '.08em' }}>พร้อมรับใน</div>
-        <div style={{ fontFamily: 'var(--serif)', fontSize: 38, lineHeight: 1, marginTop: 2 }}>{mins}</div>
-        <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 1 }}>
-          นาที {String(sec).padStart(2, '0')} วิ
-        </div>
-      </div>
-    </div>
-  );
+/* ── Bangkok time (UTC+7) — never uses system timezone ──────── */
+function toBkkHHMM(date: Date): string {
+  const bkk = new Date(date.getTime() + 7 * 3_600_000);
+  return `${String(bkk.getUTCHours()).padStart(2, '0')}:${String(bkk.getUTCMinutes()).padStart(2, '0')}`;
 }
+
+/* ── ETA from pickup_time or created_at + prepMinutes ────────── */
+function calcEta(order: OrderRow): { hhmm: string; minsLeft: number } | null {
+  let etaMs: number;
+
+  if (order.pickup_time) {
+    const parts = order.pickup_time.split(':');
+    const bkkHH = parseInt(parts[0], 10);
+    const bkkMM = parseInt(parts[1] ?? '0', 10);
+    if (isNaN(bkkHH) || isNaN(bkkMM)) return null;
+    // Build ETA in UTC from Bangkok HH:MM today
+    const bkkNow = new Date(Date.now() + 7 * 3_600_000);
+    etaMs = Date.UTC(
+      bkkNow.getUTCFullYear(), bkkNow.getUTCMonth(), bkkNow.getUTCDate(),
+      bkkHH - 7, bkkMM, 0,
+    );
+  } else {
+    etaMs = new Date(order.created_at).getTime() + SHOP.prepMinutes * 60_000;
+  }
+
+  const minsLeft = Math.max(0, Math.round((etaMs - Date.now()) / 60_000));
+  return { hhmm: toBkkHHMM(new Date(etaMs)), minsLeft };
+}
+
+/* ── Item type saved in orders.items jsonb ──────────────────── */
+type OrderItem = {
+  name:     string;
+  name_en?: string;
+  item_id?: string;
+  qty:      number;
+  total:    number;
+  size?:    string;
+  spice?:   string;
+  addons?:  { label: string; price: number }[];
+  tone?:    string;
+  topping?: string;
+};
+
+/* ── Step index mapping for progress bar ──────────────────── */
+const BAR_STEP: Record<string, number> = {
+  awaiting_payment: -1,
+  pending:           0,
+  preparing:         1,
+  ready:             2,
+  completed:         3,
+  cancelled:        -1,
+};
 
 /* ── Loading skeleton ────────────────────────────────────── */
 function Skeleton() {
   return (
-    <div className="page" style={{ paddingBottom: 80 }}>
-      <div style={{ padding: '16px 18px 12px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 12 }}>
+    <div className="page" style={{ paddingBottom: 120 }}>
+      <div style={{
+        paddingTop: 'calc(14px + env(safe-area-inset-top, 0px))',
+        paddingBottom: 12, padding: '0 18px 12px', borderBottom: '1px solid var(--line)',
+        display: 'flex', alignItems: 'center', gap: 12,
+      }}>
         <div style={{ width: 22, height: 22, borderRadius: 4, background: 'var(--bg-3)' }} />
-        <div style={{ flex: 1 }}>
-          <div style={{ width: 80, height: 10, borderRadius: 4, background: 'var(--bg-3)', marginBottom: 6 }} />
-          <div style={{ width: 120, height: 16, borderRadius: 4, background: 'var(--bg-3)' }} />
-        </div>
+        <div style={{ width: 120, height: 14, borderRadius: 4, background: 'var(--bg-3)', marginTop: 8 }} />
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 18px 0', gap: 12 }}>
-        <div style={{ width: 132, height: 132, borderRadius: '50%', background: 'var(--bg-3)' }} />
-        <div style={{ width: 160, height: 12, borderRadius: 4, background: 'var(--bg-3)' }} />
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 18px 0', gap: 14 }}>
+        <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'var(--bg-3)' }} />
+        <div style={{ width: 160, height: 22, borderRadius: 4, background: 'var(--bg-3)' }} />
+        <div style={{ width: 120, height: 12, borderRadius: 4, background: 'var(--bg-3)' }} />
       </div>
     </div>
   );
 }
 
-/* ── Error state ─────────────────────────────────────────── */
+/* ── Not found ────────────────────────────────────────────── */
 function OrderNotFound({ orderId }: { orderId: string }) {
   const navigate = useNavigate();
   return (
-    <div className="page" style={{ paddingBottom: 80, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100dvh', gap: 12, textAlign: 'center', padding: '0 32px' }}>
+    <div className="page" style={{
+      paddingBottom: 80, display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      minHeight: '100dvh', gap: 12, textAlign: 'center', padding: '0 32px',
+    }}>
       <div style={{ fontSize: 40, opacity: 0.3 }}>{I.receipt(40)}</div>
       <div className="h-display-th" style={{ fontSize: 18, color: 'var(--ink-2)' }}>ไม่พบออเดอร์</div>
-      <div style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.6 }}>#{orderId.slice(0, 8)}</div>
+      <div style={{ fontSize: 13, color: 'var(--ink-3)' }}>#{orderId.slice(0, 8)}</div>
       <button
         onClick={() => navigate('/')}
-        style={{ marginTop: 8, background: 'var(--ink)', color: 'var(--on-accent)', border: 0, padding: '12px 24px', borderRadius: 'var(--r-pill)', fontWeight: 600, fontSize: 13 }}
+        style={{
+          marginTop: 8, background: 'var(--ink)', color: 'var(--on-accent)',
+          border: 0, padding: '12px 24px', borderRadius: 'var(--r-pill)',
+          fontWeight: 600, fontSize: 13,
+        }}
       >กลับหน้าแรก</button>
     </div>
   );
 }
 
-/* ── Main page ───────────────────────────────────────────── */
+/* ── Main page ────────────────────────────────────────────── */
 export default function Track() {
-  const { orderId } = useParams<{ orderId: string }>();
-  const navigate = useNavigate();
-  const [order, setOrder]     = useState<OrderRow | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [notFound, setNotFound] = useState(false);
+  const { orderId }   = useParams<{ orderId: string }>();
+  const navigate      = useNavigate();
+  const { lang }      = useLang();
+  const L             = LANG_MAP[lang];
 
-  /* initial fetch */
+  const [order,    setOrder]    = useState<OrderRow | null>(null);
+  const [loading,  setLoading]  = useState(true);
+  const [notFound, setNotFound] = useState(false);
+  const [sheetVisible, setSheetVisible] = useState(false);
+  const [sheetOpen,    setSheetOpen]    = useState(false);
+  const prevStatus = useRef<string>('');
+  const [animKey,  setAnimKey]  = useState(0);
+
+  const reducedMotion = typeof window !== 'undefined' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ── Initial fetch ────────────────────────────────────── */
   useEffect(() => {
     if (!orderId) { setLoading(false); setNotFound(true); return; }
 
     supabase
       .from('orders')
-      .select('id, status, items, grand_total, subtotal, discount_amount, fulfillment_type, checkout_payment_method, order_number, created_at')
+      .select('id, status, items, grand_total, subtotal, discount_amount, fulfillment_type, checkout_payment_method, order_number, created_at, pickup_time')
       .eq('id', orderId)
       .single()
       .then(({ data, error }) => {
         setLoading(false);
         if (error || !data) { setNotFound(true); return; }
-        if (data.status === 'awaiting_payment') {
-          navigate(`/pay/${orderId}`, { replace: true });
-          return;
-        }
         setOrder(data as OrderRow);
+        prevStatus.current = data.status;
+        document.title = statusDocTitle(data.status, lang);
       });
-  }, [orderId]);
+  }, [orderId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* Realtime subscription */
+  /* ── Realtime subscription ────────────────────────────── */
   useEffect(() => {
     if (!orderId) return;
-
-    const channel = supabase
+    const ch = supabase
       .channel(`order-${orderId}`)
-      .on(
-        'postgres_changes',
+      .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` },
         (payload) => {
-          setOrder(prev => prev ? { ...prev, ...(payload.new as Partial<OrderRow>) } : prev);
-        }
-      )
+          setOrder(prev => {
+            if (!prev) return prev;
+            const updated = { ...prev, ...(payload.new as Partial<OrderRow>) };
+            const newStatus = updated.status ?? prev.status;
+            if (newStatus !== prevStatus.current) {
+              prevStatus.current = newStatus;
+              setAnimKey(k => k + 1);
+              document.title = statusDocTitle(newStatus, lang);
+            }
+            return updated;
+          });
+        })
       .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [orderId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    return () => { supabase.removeChannel(channel); };
-  }, [orderId]);
+  /* ── Sheet helpers ────────────────────────────────────── */
+  function openSheet()  {
+    setSheetVisible(true);
+    requestAnimationFrame(() => setSheetOpen(true));
+  }
+  function closeSheet() {
+    setSheetOpen(false);
+    setTimeout(() => setSheetVisible(false), 300);
+  }
 
   if (loading)            return <Skeleton />;
   if (notFound || !order) return <OrderNotFound orderId={orderId ?? ''} />;
 
-  const status    = order.status ?? 'pending';
-  const stepIdx   = STATUS_STEP[status] ?? 0;
-  const ui        = STATUS_UI[status] ?? STATUS_UI.pending;
-  const etaMin    = ETA_BY_STATUS[status] ?? 0;
-  const showRing  = status === 'pending' || status === 'preparing';
+  const status   = order.status ?? 'pending';
+  const stepIdx  = BAR_STEP[status] ?? -1;
+  const isCash   = order.checkout_payment_method === 'cash';
+  const isReady  = status === 'ready';
+  const isDone   = status === 'completed';
 
-  /* Parse items from jsonb */
-  const orderItems = (Array.isArray(order.items)
-    ? (order.items as { name: string; qty: number; total: number; tone?: string; topping?: string; item_id?: string }[])
+  /* ── Items ────────────────────────────────────────────── */
+  const orderItems: OrderItem[] = (Array.isArray(order.items)
+    ? (order.items as OrderItem[])
     : []
   ).filter(it => TEST_MODE || it.item_id !== 'test-1baht');
 
-  /* Timestamp label */
-  const createdAt = new Date(order.created_at);
-  const timeStr   = createdAt.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+  /* ── Recipient label ──────────────────────────────────── */
+  const label = getPickupLabel(order.id, order.order_number);
+  const labelIsName = !label.startsWith('#');
+
+  /* ── ETA line ─────────────────────────────────────────── */
+  const eta     = calcEta(order);
+  const showEta = status === 'pending' || status === 'preparing';
+
+  /* ── Created time ─────────────────────────────────────── */
+  const createdHHMM = toBkkHHMM(new Date(order.created_at));
+
+  /* ── Hero config ──────────────────────────────────────── */
+  const hero = heroConfig(status, L);
+
+  const animStyle: React.CSSProperties = reducedMotion ? {} : {
+    animation: `bpFadeIn 0.35s ease both`,
+  };
 
   return (
     <div className="page" style={{ paddingBottom: 120 }}>
+      <style>{`
+        @keyframes bpFadeIn {
+          from { opacity: 0; transform: translateY(7px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes bpSlideUp {
+          from { transform: translateY(100%); }
+          to   { transform: translateY(0); }
+        }
+      `}</style>
 
-      {/* Header */}
+      {/* ── Header ────────────────────────────────────────── */}
       <div style={{
-        paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))',
+        paddingTop: 'calc(14px + env(safe-area-inset-top, 0px))',
         paddingBottom: 12, paddingLeft: 18, paddingRight: 18,
         borderBottom: '1px solid var(--line)',
         display: 'flex', alignItems: 'center', gap: 12,
       }}>
-        <button onClick={() => navigate('/orders')} style={{ background: 'none', border: 0, padding: 0, color: 'var(--ink)' }}>
+        <button
+          onClick={() => navigate('/orders')}
+          style={{ background: 'none', border: 0, padding: '4px 4px 4px 0', color: 'var(--ink)', flexShrink: 0 }}
+          aria-label="กลับ"
+        >
           {I.back(22)}
         </button>
-        <div style={{ flex: 1 }}>
-          <div className="kicker">ออเดอร์ · ORDER</div>
-          <div style={{ fontFamily: 'var(--serif)', fontSize: 16, marginTop: 1 }}>
+        <div style={{ fontFamily: 'var(--serif)', fontSize: 15 }}>
+          {L.trackTitle}
+        </div>
+      </div>
+
+      {/* ── Hero ──────────────────────────────────────────── */}
+      <div
+        key={animKey}
+        style={{ padding: '28px 24px 0', textAlign: 'center', ...animStyle }}
+      >
+        {/* Icon circle */}
+        <div style={{
+          width: 72, height: 72, borderRadius: '50%', margin: '0 auto',
+          background: hero.bg,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: hero.color,
+          ...(isReady && !reducedMotion ? {
+            boxShadow: `0 0 0 8px ${hero.bg}`,
+            outline: `2px solid ${hero.color}`,
+          } : {}),
+        }}>
+          <hero.Icon />
+        </div>
+
+        {/* Headline */}
+        <div style={{
+          fontFamily: 'var(--serif)', fontSize: 22, marginTop: 14, lineHeight: 1.25,
+          color: hero.color,
+        }}>
+          {hero.headline}
+        </div>
+
+        {/* Sub-line */}
+        {hero.sub && (
+          <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 6, lineHeight: 1.5 }}>
+            {hero.sub}
+          </div>
+        )}
+
+        {/* ETA sub-line */}
+        {showEta && eta && (
+          <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 6 }}>
+            {eta.minsLeft > 0
+              ? L.trackEta(eta.hhmm, eta.minsLeft)
+              : L.trackAlmostReady}
+          </div>
+        )}
+
+        {/* Awaiting payment — go to pay button */}
+        {status === 'awaiting_payment' && (
+          <button
+            onClick={() => navigate(`/pay/${order.id}`)}
+            style={{
+              marginTop: 18, background: 'var(--gold)', color: '#fff',
+              border: 0, padding: '13px 28px', borderRadius: 'var(--r-pill)',
+              fontWeight: 700, fontSize: 14, letterSpacing: '0.03em',
+            }}
+          >
+            {L.trackGoToPay}
+          </button>
+        )}
+
+        {/* Created time */}
+        {status !== 'completed' && status !== 'awaiting_payment' && (
+          <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 8, letterSpacing: '.05em' }}>
+            {SHOP.branchName} · {createdHHMM}
+          </div>
+        )}
+      </div>
+
+      {/* ── Step progress row ─────────────────────────────── */}
+      <div style={{ padding: '24px 16px 0' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 0 }}>
+          {L.trackSteps.map((label, i) => {
+            const done    = stepIdx >= i;
+            const current = stepIdx === i;
+            const isLast  = i === L.trackSteps.length - 1;
+            return (
+              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
+                {/* Connector line */}
+                {!isLast && (
+                  <div style={{
+                    position: 'absolute', top: 11, left: '50%', width: '100%',
+                    height: 2, background: stepIdx > i ? 'var(--accent)' : 'var(--line)',
+                    transition: reducedMotion ? 'none' : 'background 0.4s',
+                  }} />
+                )}
+                {/* Circle */}
+                <div style={{
+                  width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
+                  background: done ? 'var(--accent)' : 'var(--bg-3)',
+                  border: done ? '0' : '1.5px solid var(--line-2)',
+                  display: 'grid', placeItems: 'center', color: '#fff',
+                  position: 'relative', zIndex: 1,
+                  boxShadow: current && !reducedMotion
+                    ? '0 0 0 5px rgba(181,81,30,0.18)' : 'none',
+                  transition: reducedMotion ? 'none' : 'all 0.4s',
+                }}>
+                  {done && I.check(12)}
+                </div>
+                {/* Label */}
+                <div style={{
+                  fontSize: 9, fontWeight: done ? 700 : 400,
+                  color: done ? 'var(--ink)' : 'var(--ink-3)',
+                  marginTop: 5, textAlign: 'center', letterSpacing: '0.04em',
+                  lineHeight: 1.3,
+                }}>
+                  {label}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Cash banner ───────────────────────────────────── */}
+      {isCash && !isDone && (
+        <div style={{
+          margin: '20px 18px 0',
+          padding: '10px 14px',
+          background: 'rgba(184,134,46,0.12)',
+          border: '1px solid rgba(184,134,46,0.30)',
+          borderRadius: 'var(--r-sm)',
+          fontSize: 13, color: 'var(--gold)', fontWeight: 600, textAlign: 'center',
+        }}>
+          {L.trackCashBanner(order.grand_total)}
+        </div>
+      )}
+
+      {/* ── Staff card ────────────────────────────────────── */}
+      <div style={{
+        margin: '16px 18px 0',
+        padding: '14px 16px',
+        background: isDone ? 'var(--bg-2)' : 'var(--ink)',
+        borderRadius: 'var(--r-md)',
+        border: isReady ? `2px solid var(--accent)` : 'none',
+        transition: reducedMotion ? 'none' : 'all 0.4s',
+        opacity: isDone ? 0.55 : 1,
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        {/* Show to staff badge */}
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          fontSize: 9, fontWeight: 700, letterSpacing: '.08em',
+          color: isDone ? 'var(--ink-3)' : 'rgba(251,243,227,0.55)',
+          marginBottom: 6,
+        }}>
+          {I.receipt(10)}
+          {L.trackShowToStaff.toUpperCase()}
+        </div>
+
+        {/* Recipient name / order number */}
+        <div style={{
+          fontFamily: 'var(--serif)',
+          fontSize: labelIsName ? 28 : 22,
+          lineHeight: 1.1,
+          color: isDone ? 'var(--ink-2)' : '#FBF3E3',
+        }}>
+          {labelIsName ? label : label}
+        </div>
+        {labelIsName && (
+          <div style={{
+            fontFamily: 'var(--mono)', fontSize: 11,
+            color: isDone ? 'var(--ink-3)' : 'rgba(251,243,227,0.5)',
+            marginTop: 2,
+          }}>
             #{order.order_number}
           </div>
-        </div>
-      </div>
+        )}
 
-      {/* ── Status hero ── */}
-      <div style={{ padding: '28px 18px 0', textAlign: 'center' }}>
-        {/* Status pill */}
+        {/* Payment badge */}
         <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: 8,
-          padding: '6px 14px', borderRadius: 'var(--r-pill)',
-          background: ui.bg, color: ui.color,
-          fontSize: 11, fontWeight: 600, letterSpacing: '.06em',
+          position: 'absolute', top: 14, right: 14,
+          fontSize: 10, fontWeight: 700, letterSpacing: '.05em',
+          padding: '3px 8px', borderRadius: 'var(--r-pill)',
+          background: isDone ? 'var(--bg-3)' : 'rgba(255,255,255,0.12)',
+          color: isDone ? 'var(--ink-3)'
+            : isCash && !isDone ? 'rgba(251,243,227,0.65)' : 'rgba(251,243,227,0.8)',
         }}>
-          {status !== 'completed' && <PulseDot color={ui.color} />}
-          {ui.th} · {ui.en}
+          {isDone
+            ? L.trackCollected
+            : isCash
+              ? L.trackCash(order.grand_total)
+              : L.trackPaid}
         </div>
+      </div>
 
-        {/* Countdown ring (pending / preparing) */}
-        {showRing && etaMin > 0 && <CountdownRing initialMin={etaMin} />}
+      {/* ── Items row (collapsible trigger) ───────────────── */}
+      <button
+        onClick={openSheet}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          width: '100%', margin: '12px 0 0',
+          padding: '14px 18px',
+          background: 'none', border: 0,
+          borderTop: '1px solid var(--line)', borderBottom: '1px solid var(--line)',
+          cursor: 'pointer', textAlign: 'left',
+        }}
+      >
+        <span style={{ fontFamily: 'var(--serif)', fontSize: 13, color: 'var(--ink)' }}>
+          {L.trackNItems(orderItems.length || 1, order.grand_total)}
+        </span>
+        {I.chevron(16, 'down')}
+      </button>
 
-        {/* Ready checkmark */}
-        {status === 'ready' && (
-          <div style={{ marginTop: 24 }}>
+      {/* ── Directions button ─────────────────────────────── */}
+      <div style={{ padding: '12px 18px 0' }}>
+        <a
+          href={LINKS.googleMaps ?? '#'}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            width: '100%', padding: '13px 0',
+            background: 'var(--bg-2)', border: '1px solid var(--line)',
+            borderRadius: 'var(--r-pill)', color: 'var(--ink)',
+            fontSize: 14, fontWeight: 600, textDecoration: 'none',
+          }}
+        >
+          {I.pin(16)}
+          {L.trackDirections}
+        </a>
+      </div>
+
+      {/* ── Footer ────────────────────────────────────────── */}
+      <div style={{
+        padding: '18px 24px 0', textAlign: 'center',
+        fontSize: 11, color: 'var(--ink-3)', lineHeight: 1.6,
+      }}>
+        {!isDone ? (
+          <>
+            <div>{L.trackFooter}</div>
+            <div style={{ marginTop: 6 }}>
+              <a
+                href="/order"
+                onClick={e => { e.preventDefault(); navigate('/order'); }}
+                style={{ color: 'var(--ink-3)', textDecoration: 'underline', fontSize: 11 }}
+              >
+                {L.trackOrderMore}
+              </a>
+            </div>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={() => navigate('/order')}
+              style={{
+                display: 'block', width: '100%', marginBottom: 12,
+                padding: '13px 0', background: 'var(--ink)', color: 'var(--on-accent)',
+                border: 0, borderRadius: 'var(--r-pill)',
+                fontWeight: 700, fontSize: 14, cursor: 'pointer',
+              }}
+            >
+              {L.trackOrderAgain}
+            </button>
+            <a
+              href="/orders"
+              onClick={e => { e.preventDefault(); navigate('/orders'); }}
+              style={{ color: 'var(--ink-3)', textDecoration: 'underline', fontSize: 11 }}
+            >
+              {L.trackAllOrders}
+            </a>
+          </>
+        )}
+      </div>
+
+      {/* ── Items bottom sheet ────────────────────────────── */}
+      {sheetVisible && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 100,
+            background: 'rgba(43,33,24,0.6)',
+            opacity: sheetOpen ? 1 : 0,
+            transition: reducedMotion ? 'none' : 'opacity 0.2s',
+          }}
+          onClick={closeSheet}
+        >
+          <div
+            style={{
+              position: 'absolute', bottom: 0, left: 0, right: 0,
+              background: 'var(--bg)',
+              borderRadius: '16px 16px 0 0',
+              maxHeight: '80dvh',
+              overflowY: 'auto',
+              paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+              transform: sheetOpen ? 'translateY(0)' : 'translateY(100%)',
+              transition: reducedMotion ? 'none' : 'transform 0.28s cubic-bezier(0.32,0.72,0,1)',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Sheet header */}
             <div style={{
-              width: 100, height: 100, borderRadius: '50%', margin: '0 auto',
-              background: ui.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ui.color,
+              position: 'sticky', top: 0, background: 'var(--bg)',
+              padding: '16px 18px 12px',
+              borderBottom: '1px solid var(--line)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             }}>
-              {I.check(48)}
+              <div style={{ fontFamily: 'var(--serif)', fontSize: 15 }}>
+                {L.trackNItems(orderItems.length || 1, order.grand_total)}
+              </div>
+              <button
+                onClick={closeSheet}
+                style={{ background: 'none', border: 0, padding: 4, color: 'var(--ink)' }}
+              >
+                {I.close(20)}
+              </button>
             </div>
-          </div>
-        )}
 
-        {/* Completed */}
-        {status === 'completed' && (
-          <div style={{ marginTop: 24 }}>
+            {/* Items */}
+            <div style={{ padding: '8px 0' }}>
+              {orderItems.length === 0 ? (
+                <div style={{ padding: '24px 18px', fontSize: 13, color: 'var(--ink-3)', textAlign: 'center' }}>
+                  ไม่มีข้อมูลรายการ
+                </div>
+              ) : (
+                orderItems.map((it, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      padding: '12px 18px',
+                      borderBottom: i < orderItems.length - 1 ? '1px solid var(--line)' : 'none',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontFamily: 'var(--serif)', fontSize: 14 }}>
+                          {lang === 'en' && it.name_en ? it.name_en : it.name}
+                          <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-3)', marginLeft: 6 }}>
+                            ×{it.qty}
+                          </span>
+                        </div>
+                        {/* Customization summary */}
+                        <ItemCustomSummary item={it} />
+                      </div>
+                      <div style={{ fontFamily: 'var(--mono)', fontSize: 13, flexShrink: 0 }}>
+                        ฿{it.total}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Total row */}
             <div style={{
-              width: 100, height: 100, borderRadius: '50%', margin: '0 auto',
-              background: 'rgba(74,93,63,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-2)',
+              padding: '12px 18px',
+              borderTop: '1px solid var(--line)',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
             }}>
-              {I.receipt(40)}
-            </div>
-            <div style={{ fontFamily: 'var(--serif)', fontSize: 22, marginTop: 16 }}>ขอบคุณมากครับ 🙏</div>
-          </div>
-        )}
-
-        {/* Subtitle */}
-        <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 14, letterSpacing: '.06em' }}>
-          {status === 'ready' ? `รับได้แล้ว · ${SHOP.branchName}` : `สั่งเวลา ${timeStr} · ${SHOP.branchName}`}
-        </div>
-
-        {/* Branch strip */}
-        {status !== 'completed' && (
-          <div style={{
-            margin: '16px 0 0', padding: '12px 16px',
-            background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)',
-            display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left',
-          }}>
-            <span style={{ color: 'var(--accent-2)' }}>{I.pin(18)}</span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: 'var(--serif)', fontSize: 13 }}>{SHOP.branchName}</div>
-              <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 1 }}>เปิดถึง {shopCloseLabel()}</div>
-            </div>
-            <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>นำทาง</span>
-          </div>
-        )}
-      </div>
-
-      {/* ── Timeline ── */}
-      <div style={{ padding: '32px 24px 0' }}>
-        {STEPS.map((step, i) => {
-          const done    = i <= stepIdx;
-          const current = i === stepIdx;
-          const isLast  = i === STEPS.length - 1;
-
-          return (
-            <div key={i} style={{ display: 'flex', gap: 14, position: 'relative', paddingBottom: isLast ? 0 : 22 }}>
-              {/* Connector */}
-              {!isLast && (
-                <span style={{
-                  position: 'absolute', left: 11, top: 24, bottom: -2, width: 2,
-                  background: i + 1 <= stepIdx ? 'var(--accent)' : 'var(--line)',
-                  borderRadius: 2,
-                }} />
-              )}
-
-              {/* Dot */}
-              <span style={{
-                width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
-                background: done ? 'var(--accent)' : 'var(--bg-3)',
-                border: done ? '0' : '1.5px solid var(--line-2)',
-                display: 'grid', placeItems: 'center', color: '#fff',
-                boxShadow: current ? '0 0 0 6px rgba(181,81,30,0.18)' : 'none',
-                zIndex: 1, transition: 'all 0.4s',
-              }}>
-                {done && I.check(13)}
-              </span>
-
-              {/* Label */}
-              <div style={{ flex: 1, paddingTop: 1 }}>
-                <div style={{
-                  fontFamily: 'var(--serif)', fontSize: 14,
-                  color: done || current ? 'var(--ink)' : 'var(--ink-3)',
-                  fontWeight: current ? 600 : 400,
-                }}>{step.label}</div>
-                <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 1 }}>{step.labelEn}</div>
+              <div style={{ fontFamily: 'var(--serif)', fontSize: 13, color: 'var(--ink-2)' }}>
+                {lang === 'en' ? 'Total' : 'ยอดรวม'}
               </div>
-
-              {/* Time stamp for done steps */}
-              {i === 0 && (
-                <span style={{ fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--mono)', paddingTop: 2 }}>
-                  {timeStr}
-                </span>
-              )}
-              {i === stepIdx && i > 0 && (
-                <span style={{ fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--mono)', paddingTop: 2 }}>
-                  ตอนนี้
-                </span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* ── Order items ── */}
-      <div style={{ padding: '28px 18px 0' }}>
-        <div className="kicker muted" style={{ marginBottom: 8 }}>รายการ · ITEMS</div>
-        <div style={{ padding: 14, borderRadius: 'var(--r-md)', background: 'var(--bg-2)', border: '1px solid var(--line)' }}>
-          {orderItems.length === 0 ? (
-            <div style={{ fontSize: 12, color: 'var(--ink-3)', textAlign: 'center', padding: '8px 0' }}>ไม่มีข้อมูลรายการ</div>
-          ) : (
-            orderItems.map((it, i) => (
-              <div key={i} style={{
-                display: 'flex', gap: 10, alignItems: 'center', padding: '8px 0',
-                borderBottom: i < orderItems.length - 1 ? '1px solid var(--line)' : 'none',
-              }}>
-                <span style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--ink-3)', width: 20, flexShrink: 0 }}>
-                  ×{it.qty}
-                </span>
-                <Bowl tone={it.tone ?? 'clay'} topping={it.topping ?? 'egg'} size={36} />
-                <div style={{ flex: 1, fontFamily: 'var(--serif)', fontSize: 13, lineHeight: 1.2 }}>{it.name}</div>
-                <span className="thb" style={{ fontFamily: 'var(--mono)', fontSize: 13 }}>{it.total}</span>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 700 }}>
+                ฿{order.grand_total}
               </div>
-            ))
-          )}
-
-          {/* Total */}
-          <div style={{
-            display: 'flex', justifyContent: 'space-between',
-            marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--line)', alignItems: 'baseline',
-          }}>
-            <span style={{ fontFamily: 'var(--serif)', fontSize: 13 }}>ยอดรวม · TOTAL</span>
-            <span className="thb price" style={{ fontSize: 18 }}>{order.grand_total}</span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      <div style={{ height: 24 }} />
       <TabBar active="orders" />
     </div>
   );
+}
+
+/* ── Item customization summary line ──────────────────────── */
+function ItemCustomSummary({ item }: { item: OrderItem }) {
+  const parts: string[] = [];
+  if (item.size)  parts.push(item.size);
+  if (item.spice) parts.push(item.spice);
+  if (Array.isArray(item.addons)) {
+    item.addons.forEach(a => { if (a.label) parts.push(a.label); });
+  }
+  if (parts.length === 0) return null;
+  return (
+    <div style={{
+      fontSize: 11, color: 'var(--ink-3)', marginTop: 3,
+      lineHeight: 1.4, display: 'flex', flexWrap: 'wrap', gap: '0 4px',
+    }}>
+      {parts.map((p, i) => (
+        <span key={i}>
+          {p}{i < parts.length - 1 ? ' ·' : ''}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/* ── Hero config per status ───────────────────────────────── */
+type HeroConf = {
+  headline: string;
+  sub:      string | null;
+  color:    string;
+  bg:       string;
+  Icon:     () => React.ReactNode;
+};
+
+function heroConfig(status: string, L: LangDict): HeroConf {
+  switch (status) {
+    case 'awaiting_payment':
+      return {
+        headline: L.trackAwaitingHeadline,
+        sub:      null,
+        color:    'var(--gold)',
+        bg:       'rgba(184,134,46,0.14)',
+        Icon:     () => I.qr(32),
+      };
+    case 'pending':
+      return {
+        headline: L.trackPendingHeadline,
+        sub:      null,
+        color:    'var(--gold)',
+        bg:       'rgba(184,134,46,0.14)',
+        Icon:     () => I.receipt(32),
+      };
+    case 'preparing':
+      return {
+        headline: L.trackPreparingHeadline,
+        sub:      null,
+        color:    'var(--accent-2)',
+        bg:       'rgba(74,93,63,0.14)',
+        Icon:     () => I.dinein(32),
+      };
+    case 'ready':
+      return {
+        headline: L.trackReadyHeadline,
+        sub:      L.trackReadySub,
+        color:    'var(--accent)',
+        bg:       'rgba(181,81,30,0.14)',
+        Icon:     () => I.check(34),
+      };
+    case 'completed':
+      return {
+        headline: L.trackCompletedHeadline,
+        sub:      L.trackCompletedSub,
+        color:    'var(--accent-2)',
+        bg:       'rgba(74,93,63,0.14)',
+        Icon:     () => I.receipt(30),
+      };
+    default:
+      return {
+        headline: L.trackUnknownHeadline,
+        sub:      L.trackUnknownSub,
+        color:    'var(--ink-3)',
+        bg:       'var(--bg-3)',
+        Icon:     () => I.info(30),
+      };
+  }
+}
+
+/* ── Document title ───────────────────────────────────────── */
+function statusDocTitle(status: string, lang: 'th' | 'en'): string {
+  const titles: Record<string, { th: string; en: string }> = {
+    awaiting_payment: { th: 'รอชำระเงิน',        en: 'Awaiting payment'  },
+    pending:          { th: 'ร้านรับออเดอร์แล้ว', en: 'Order received'    },
+    preparing:        { th: 'ครัวกำลังทำ',        en: 'Making your meal'  },
+    ready:            { th: 'พร้อมให้รับแล้ว',    en: 'Ready for pickup'  },
+    completed:        { th: 'รับแล้ว',             en: 'Order collected'   },
+  };
+  return titles[status]?.[lang] ?? (lang === 'en' ? 'Your order' : 'ออเดอร์ของคุณ');
 }

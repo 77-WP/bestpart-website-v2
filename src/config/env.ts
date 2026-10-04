@@ -12,3 +12,7 @@ export const ENABLE_BEAM = import.meta.env.VITE_ENABLE_BEAM === 'true';
 /** When true, curbside orders are locked to PromptPay only (cash hidden).
  *  Change this single flag to re-enable cash for curbside. */
 export const CURBSIDE_PROMPTPAY_ONLY = true;
+
+/** When true, shows the "I'm here" arrival button on the curbside Track page.
+ *  Keep false until the curbside arrival flow is implemented. */
+export const CURBSIDE_ARRIVAL_ENABLED = false;

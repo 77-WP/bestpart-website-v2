@@ -26,4 +26,5 @@ export type OrderRow = {
   checkout_payment_method: string | null
   order_number: number
   created_at: string
+  pickup_time: string | null
 }

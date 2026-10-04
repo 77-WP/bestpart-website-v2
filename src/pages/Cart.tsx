@@ -328,75 +328,87 @@ export default function Cart() {
           initial={prefersReduced ? false : { opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.04 }}
-          style={{ marginTop: 20 }}
+          style={{ marginTop: 16 }}
         >
-          <div style={{ padding: '0 18px', marginBottom: 8 }}>
-            <div style={{ fontSize: 10, letterSpacing: '.06em', color: 'var(--ink-3)', textTransform: 'uppercase' }}>
+          {/* Header */}
+          <div style={{ padding: '0 18px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 13, fontFamily: 'var(--serif)', color: 'var(--ink)' }}>
               {t('cart.drinksSection')}
-            </div>
+            </span>
+            <span style={{ fontSize: 10, color: 'var(--ink-3)' }}>
+              {t('cart.drinksOptional')}
+            </span>
           </div>
 
-          {/* ≤3 → full-width equal row; >3 → horizontal scroll */}
-          <div style={drinks.length <= 3
-            ? { padding: '0 18px', display: 'flex', gap: 10 }
-            : { display: 'flex', gap: 10, overflowX: 'auto', paddingLeft: 18, paddingRight: 18 }
-          }>
+          {/* Compact cards row — scroll when >2 */}
+          <div style={{
+            display: 'flex', gap: 8,
+            overflowX: drinks.length > 2 ? 'auto' : 'visible',
+            paddingLeft: 18, paddingRight: 18,
+          }}>
             {drinks.map(drink => {
               const count = drinkQty(drink.id);
-              const cardStyle: React.CSSProperties = drinks.length <= 3
-                ? { flex: 1 }
-                : { flexShrink: 0, width: 96 };
-
               return (
-                <div key={drink.id} style={cardStyle}>
-                  {/* Glow + image (square aspect ratio, fixed height prevents overflow onto text) */}
+                <div key={drink.id} style={{
+                  flex: drinks.length <= 2 ? 1 : 'none',
+                  width: drinks.length > 2 ? 168 : undefined,
+                  flexShrink: 0,
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '10px 10px',
+                  borderRadius: 'var(--r-md)',
+                  background: 'var(--bg-2)',
+                  border: '1px solid var(--line)',
+                  minHeight: 64,
+                }}>
+                  {/* Image 44×44 */}
                   <div style={{
-                    width: '100%', paddingTop: '100%', position: 'relative',
-                    background: GLOW, borderRadius: 10,
+                    width: 44, height: 44, flexShrink: 0,
+                    borderRadius: 8, overflow: 'hidden',
+                    background: GLOW,
+                    display: 'grid', placeItems: 'center',
                   }}>
-                    <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
-                      {drink.image_url ? (
-                        <img src={drink.image_url} alt={lang === 'en' ? drink.name_en : drink.name_th}
-                          style={{ width: '78%', height: '78%', objectFit: 'contain' }}
-                        />
-                      ) : (
-                        <span style={{ opacity: 0.18, color: 'var(--ink-3)' }}>{I.bag(28)}</span>
-                      )}
+                    {drink.image_url ? (
+                      <img src={drink.image_url} alt={lang === 'en' ? drink.name_en : drink.name_th}
+                        style={{ width: 40, height: 40, objectFit: 'contain' }}
+                      />
+                    ) : (
+                      <span style={{ opacity: 0.18, color: 'var(--ink-3)' }}>{I.bag(22)}</span>
+                    )}
+                  </div>
+
+                  {/* Name + price */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: 12, fontFamily: 'var(--serif)', lineHeight: 1.2,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      color: 'var(--ink)',
+                    }}>
+                      {lang === 'en' ? drink.name_en : drink.name_th}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--mono)', marginTop: 2 }}>
+                      ฿{drink.base_price}
                     </div>
                   </div>
 
-                  {/* Name */}
-                  <div style={{ fontSize: 12, fontFamily: 'var(--serif)', lineHeight: 1.25, marginTop: 5, color: 'var(--ink)' }}>
-                    {lang === 'en' ? drink.name_en : drink.name_th}
-                  </div>
-
-                  {/* Price + stepper (fixed-height row so all cards are equal) */}
-                  <div style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    marginTop: 4, minHeight: 28,
-                  }}>
-                    <span style={{ fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>
-                      ฿{drink.base_price}
-                    </span>
-                    {count > 0 ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <motion.button
-                          whileTap={prefersReduced ? undefined : { scale: 0.88 }}
-                          onClick={() => decDrink(drink)} style={roundBtn}
-                        >{I.minus(10)}</motion.button>
-                        <span style={{ minWidth: 14, textAlign: 'center', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600 }}>{count}</span>
-                        <motion.button
-                          whileTap={prefersReduced ? undefined : { scale: 0.88 }}
-                          onClick={() => addDrink(drink)} style={roundBtn}
-                        >{I.plus(10)}</motion.button>
-                      </div>
-                    ) : (
+                  {/* + or − n + */}
+                  {count > 0 ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                      <motion.button
+                        whileTap={prefersReduced ? undefined : { scale: 0.88 }}
+                        onClick={() => decDrink(drink)} style={roundBtn}
+                      >{I.minus(10)}</motion.button>
+                      <span style={{ minWidth: 14, textAlign: 'center', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600 }}>{count}</span>
                       <motion.button
                         whileTap={prefersReduced ? undefined : { scale: 0.88 }}
                         onClick={() => addDrink(drink)} style={roundBtn}
-                      >{I.plus(13)}</motion.button>
-                    )}
-                  </div>
+                      >{I.plus(10)}</motion.button>
+                    </div>
+                  ) : (
+                    <motion.button
+                      whileTap={prefersReduced ? undefined : { scale: 0.88 }}
+                      onClick={() => addDrink(drink)} style={{ ...roundBtn, flexShrink: 0 }}
+                    >{I.plus(13)}</motion.button>
+                  )}
                 </div>
               );
             })}

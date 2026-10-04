@@ -1,8 +1,10 @@
 // Runtime feature flags — read from Vite env vars
 // Set in .env.local (never committed — covered by *.local in .gitignore)
 
-/** True only when VITE_TEST_MODE=true is set in .env.local */
-export const TEST_MODE = import.meta.env.VITE_TEST_MODE === 'true';
+/** True only in DEV server AND VITE_TEST_MODE=true in .env.local.
+ *  import.meta.env.DEV is false in production builds, so this is always
+ *  false after `npm run build` regardless of .env.local contents. */
+export const TEST_MODE = import.meta.env.DEV && import.meta.env.VITE_TEST_MODE === 'true';
 
 /** True only when VITE_ENABLE_BEAM=true is set in .env.local */
 export const ENABLE_BEAM = import.meta.env.VITE_ENABLE_BEAM === 'true';

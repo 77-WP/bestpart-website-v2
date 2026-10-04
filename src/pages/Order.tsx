@@ -75,7 +75,14 @@ export default function Order() {
 
   const method = searchParams.get('method') ?? 'dine-in';
   const itemId = searchParams.get('item');
-  const [shopInfo] = useState(() => computeSlots());
+  const [shopInfo] = useState(() => {
+    const base = computeSlots();
+    if (!TEST_MODE) return base;
+    const slots = base.slots.length > 0
+      ? base.slots
+      : [{ label: 'พร้อมเร็วสุด', sub: `~${SHOP.prepMinutes} นาที`, value: null, isAsap: true as const }];
+    return { isOpen: true, slots, nextOpenMsg: '' };
+  });
 
   /* ── Data ───────────────────────────────────────────── */
   const [cats,         setCats]         = useState<Category[]>([]);

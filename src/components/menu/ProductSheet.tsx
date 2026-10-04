@@ -60,14 +60,14 @@ function spiceIndex(optNameTh: string) {
 /* ── Props ───────────────────────────────────────────────── */
 type Props = {
   isShopOpen: boolean;
-  shopNextOpen: string;
+  shopClosedMsg: string;
   categories?: { id: string; name_en: string }[];
 };
 
 /* ══════════════════════════════════════════════════════════
    PRODUCT SHEET — two-step flow
 ══════════════════════════════════════════════════════════ */
-export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
+export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
   const { add, replace, items } = useCart();
   const { t, lang }    = useT();
@@ -467,7 +467,7 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
                   color: 'var(--ink-2)',
                   borderBottom: '1px solid var(--line)',
                 }}>
-                  <strong style={{ color: 'var(--ink)' }}>{t('detail.closedBanner', shopNextOpen)}</strong>
+                  <strong style={{ color: 'var(--ink)' }}>{shopClosedMsg}</strong>
                 </div>
               )}
 
@@ -1010,7 +1010,7 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
                     marginTop: 8, textAlign: 'center',
                     fontSize: 12, color: 'var(--ink-3)',
                   }}>
-                    {t('detail.closedAddMsg', shopNextOpen)}
+                    {shopClosedMsg}
                   </div>
                 )}
               </>

@@ -318,7 +318,7 @@ export default function Track() {
         {/* Created time */}
         {status !== 'completed' && status !== 'awaiting_payment' && (
           <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 8, letterSpacing: '.05em' }}>
-            {SHOP.branchName} · {createdHHMM}
+            {lang === 'en' ? SHOP.branchNameEn : SHOP.branchName} · {createdHHMM}
           </div>
         )}
       </div>

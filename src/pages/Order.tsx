@@ -300,7 +300,7 @@ export default function Order() {
 
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontFamily: 'var(--serif)', fontSize: 14, fontWeight: 600, lineHeight: 1.1 }}>
-              {SHOP.branchName}
+              {lang === 'en' ? SHOP.branchNameEn : SHOP.branchName}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
               <span style={{
@@ -721,7 +721,7 @@ export default function Order() {
       {itemId && (
         <ProductSheet
           isShopOpen={shopInfo.isOpen}
-          shopNextOpen={shopInfo.nextOpenMsg}
+          shopClosedMsg={shopClosedMsg()}
           categories={catForSheet}
         />
       )}

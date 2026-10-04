@@ -75,6 +75,16 @@ export default function Cart() {
     return { ...base, isOpen: true, slots, nextOpenMsg: '' };
   });
 
+  function shopClosedMsg(): string {
+    if (shopInfo.forcedClosed && shopInfo.reopenAt) {
+      const bkk  = new Date(shopInfo.reopenAt.getTime() + 7 * 3_600_000);
+      const date = bkk.toLocaleDateString(lang === 'th' ? 'th-TH' : 'en-GB', { day: 'numeric', month: 'short' });
+      const time = `${String(bkk.getUTCHours()).padStart(2,'0')}:${String(bkk.getUTCMinutes()).padStart(2,'0')}`;
+      return t('shop.forcedClosed', date, time);
+    }
+    return t('menu.status.closed', shopInfo.nextOpenMsg);
+  }
+
   /* Drinks */
   const [drinks, setDrinks] = useState<DrinkItem[]>([]);
   useEffect(() => {
@@ -598,7 +608,7 @@ export default function Cart() {
 
       {/* ProductSheet — edit mode */}
       {itemId && (
-        <ProductSheet isShopOpen={shopInfo.isOpen} shopNextOpen={shopInfo.nextOpenMsg} />
+        <ProductSheet isShopOpen={shopInfo.isOpen} shopClosedMsg={shopClosedMsg()} />
       )}
     </div>
   );

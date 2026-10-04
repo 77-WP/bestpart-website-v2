@@ -107,6 +107,16 @@ export default function Checkout() {
   /* ── Shop info — recomputed every minute ────────────────── */
   const [shopInfo, setShopInfo] = useState<ShopStatus>(makeShopInfo);
 
+  function shopClosedMsg(): string {
+    if (shopInfo.forcedClosed && shopInfo.reopenAt) {
+      const bkk  = new Date(shopInfo.reopenAt.getTime() + 7 * 3_600_000);
+      const date = bkk.toLocaleDateString(lang === 'th' ? 'th-TH' : 'en-GB', { day: 'numeric', month: 'short' });
+      const time = `${String(bkk.getUTCHours()).padStart(2,'0')}:${String(bkk.getUTCMinutes()).padStart(2,'0')}`;
+      return t('shop.forcedClosed', date, time);
+    }
+    return t('menu.status.closed', shopInfo.nextOpenMsg);
+  }
+
   /* ── Selected slot — undefined = not chosen ────────────── */
   // null = ASAP, "HH:MM" = fixed time, undefined = nothing chosen yet
   const [selSlot,        setSelSlot]        = useState<string | null | undefined>(undefined);
@@ -563,9 +573,9 @@ export default function Checkout() {
         <div style={{ fontSize: 12, color: 'var(--ink-2)', display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
           {method ? (
             <span style={{ color: 'var(--ink)', fontWeight: 600 }}>
-              {method === 'dine'     ? t('checkout.locationDine', SHOP.branchName)
-               : method === 'curbside' ? t('checkout.locationCurbside', SHOP.branchName)
-               : t('checkout.locationTakeaway', SHOP.branchName)}
+              {method === 'dine'     ? t('checkout.locationDine', lang === 'en' ? SHOP.branchNameEn : SHOP.branchName)
+               : method === 'curbside' ? t('checkout.locationCurbside', lang === 'en' ? SHOP.branchNameEn : SHOP.branchName)
+               : t('checkout.locationTakeaway', lang === 'en' ? SHOP.branchNameEn : SHOP.branchName)}
             </span>
           ) : (
             <span style={{ color: 'var(--ink-3)', marginRight: 2 }}>{t('checkout.pickupAt')}</span>
@@ -612,8 +622,7 @@ export default function Checkout() {
             background: 'rgba(43,33,24,0.06)', border: '1px solid var(--line)',
             fontSize: 13, color: 'var(--ink-2)',
           }}>
-            <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{t('checkout.shopClosedLabel')}</span>
-            {' · '}<span style={{ fontFamily: 'var(--mono)', fontWeight: 600 }}>{shopInfo.nextOpenMsg}</span>
+            <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{shopClosedMsg()}</span>
           </div>
         )}
 

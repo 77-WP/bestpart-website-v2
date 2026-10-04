@@ -245,7 +245,7 @@ export default function Landing() {
       {/* ── e) Footer ────────────────────────────────────── */}
       <div style={{ padding: '4px 18px 16px', textAlign: 'center' }}>
         <span style={{ fontSize: 11, color: 'var(--ink-3)', letterSpacing: '.06em' }}>
-          BEST PART BOWLS · {SHOP.branchName}
+          BEST PART BOWLS · {lang === 'en' ? SHOP.branchNameEn : SHOP.branchName}
         </span>
       </div>
 
@@ -289,7 +289,7 @@ export default function Landing() {
             <div className="kicker" style={{ marginBottom: 4 }}>{t('home.sheet.about.kicker')}</div>
             <div style={{ fontFamily: 'var(--serif)', fontSize: 18, marginBottom: 14 }}>{t('home.sheet.about.title')}</div>
             <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.8 }}>
-              {t('home.sheet.about.body', SHOP.branchName)}
+              {t('home.sheet.about.body', lang === 'en' ? SHOP.branchNameEn : SHOP.branchName)}
             </div>
           </div>
         </BottomSheet>

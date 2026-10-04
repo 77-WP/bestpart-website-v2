@@ -286,7 +286,9 @@ export default function Track() {
         {/* Sub-line */}
         {hero.sub && (
           <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 6, lineHeight: 1.5 }}>
-            {hero.sub}
+            {hero.sub.split('\n').map((line, i) => (
+              <div key={i}>{line}</div>
+            ))}
           </div>
         )}
 
@@ -647,10 +649,9 @@ function heroConfig(status: string, t: (key: keyof Dict, ...args: any[]) => stri
         Icon:     () => I.qr(32),
       };
     case 'pending': {
-      const pendingSub = customerName ? t('track.pendingSub', customerName) : null;
       return {
-        headline: t('track.pendingHeadline'),
-        sub:      pendingSub || null,
+        headline: t('track.pendingHeadline', customerName),
+        sub:      null,
         color:    'var(--gold)',
         bg:       'rgba(184,134,46,0.14)',
         Icon:     () => I.receipt(32),
@@ -675,7 +676,7 @@ function heroConfig(status: string, t: (key: keyof Dict, ...args: any[]) => stri
     case 'completed':
       return {
         headline: t('track.completedHeadline'),
-        sub:      t('track.completedSub'),
+        sub:      `${t('track.completedSub')}\n${t('track.completedSub2')}`,
         color:    'var(--accent-2)',
         bg:       'rgba(74,93,63,0.14)',
         Icon:     () => I.receipt(30),

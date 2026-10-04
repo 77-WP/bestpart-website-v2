@@ -6,7 +6,7 @@ import { Bowl } from '../components/Bowl';
 import { CartBar } from '../components/CartBar';
 import { TabBar } from '../components/TabBar';
 import { I } from '../components/icons';
-import { SHOP, computeSlots, shopCloseLabel } from '../config/shop';
+import { SHOP, computeShopStatus, shopCloseLabel } from '../config/shop';
 import { TEST_MODE } from '../config/env';
 import { ProductSheet } from '../components/menu/ProductSheet';
 import { FEATURED_KEYWORD } from '../config/featured';
@@ -73,18 +73,28 @@ export default function Order() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const prefersReduced = useReducedMotion();
-  const { t } = useT();
+  const { t, lang } = useT();
 
   const method = searchParams.get('method') ?? 'dine-in';
   const itemId = searchParams.get('item');
   const [shopInfo] = useState(() => {
-    const base = computeSlots();
+    const base = computeShopStatus();
     if (!TEST_MODE) return base;
     const slots = base.slots.length > 0
       ? base.slots
       : [{ label: 'พร้อมเร็วสุด', sub: `~${SHOP.prepMinutes} นาที`, value: null, isAsap: true as const }];
-    return { isOpen: true, slots, nextOpenMsg: '' };
+    return { ...base, isOpen: true, slots, nextOpenMsg: '' };
   });
+
+  function shopClosedMsg(): string {
+    if (shopInfo.forcedClosed && shopInfo.reopenAt) {
+      const bkk  = new Date(shopInfo.reopenAt.getTime() + 7 * 3_600_000);
+      const date = bkk.toLocaleDateString(lang === 'th' ? 'th-TH' : 'en-GB', { day: 'numeric', month: 'short' });
+      const time = `${String(bkk.getUTCHours()).padStart(2,'0')}:${String(bkk.getUTCMinutes()).padStart(2,'0')}`;
+      return t('shop.forcedClosed', date, time);
+    }
+    return t('menu.status.closed', shopInfo.nextOpenMsg);
+  }
 
   /* ── Data ───────────────────────────────────────────── */
   const [cats,         setCats]         = useState<Category[]>([]);
@@ -278,7 +288,7 @@ export default function Order() {
             fontSize: 12, color: 'var(--ink-2)',
             display: 'flex', alignItems: 'center', gap: 6,
           }}>
-            <span style={{ fontWeight: 700, color: 'var(--ink)' }}>{t('menu.status.closed', shopInfo.nextOpenMsg)}</span>
+            <span style={{ fontWeight: 700, color: 'var(--ink)' }}>{shopClosedMsg()}</span>
             <span>{t('menu.header.closed.browse')}</span>
           </div>
         )}
@@ -301,7 +311,7 @@ export default function Order() {
                 color: shopInfo.isOpen ? 'var(--accent-2)' : 'var(--ink-3)',
               }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: shopInfo.isOpen ? 'var(--accent-2)' : 'var(--ink-3)' }} />
-                {shopInfo.isOpen ? t('menu.status.open', shopCloseLabel()) : t('menu.status.closed', shopInfo.nextOpenMsg)}
+                {shopInfo.isOpen ? t('menu.status.open', shopCloseLabel()) : shopClosedMsg()}
               </span>
               <button
                 onClick={cycleMethod}

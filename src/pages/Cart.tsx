@@ -8,7 +8,7 @@ import { I } from '../components/icons';
 import { ProductSheet } from '../components/menu/ProductSheet';
 import { useT } from '../i18n';
 import { supabase } from '../lib/supabase';
-import { computeSlots } from '../config/shop';
+import { computeShopStatus } from '../config/shop';
 import { TEST_MODE } from '../config/env';
 
 /* ── Drinks ──────────────────────────────────────────────── */
@@ -67,12 +67,12 @@ export default function Cart() {
 
   /* Shop info for ProductSheet */
   const [shopInfo] = useState(() => {
-    const base = computeSlots();
+    const base = computeShopStatus();
     if (!TEST_MODE) return base;
     const slots = base.slots.length > 0
       ? base.slots
       : [{ label: 'พร้อมเร็วสุด', sub: `~12 นาที`, value: null, isAsap: true as const }];
-    return { isOpen: true, slots, nextOpenMsg: '' };
+    return { ...base, isOpen: true, slots, nextOpenMsg: '' };
   });
 
   /* Drinks */
@@ -505,6 +505,12 @@ export default function Cart() {
             <span style={{ fontSize: 13, color: 'var(--ink-3)' }}>{t('cart.kitchenNotePlaceholder')}</span>
           </button>
         )}
+        <div style={{ marginTop: 6, fontSize: 11, color: 'var(--ink-3)', lineHeight: 1.5 }}>
+          {t('cart.kitchenNoteHelper')}
+        </div>
+        <div style={{ marginTop: 2, fontSize: 10, color: 'var(--ink-3)' }}>
+          {t('cart.kitchenNoteSmall')}
+        </div>
         {/* TODO(session3/4): trim and escape kitchen note before sending to DB/Telegram */}
       </motion.div>
 

@@ -458,9 +458,19 @@ export default function Pay() {
             background: 'var(--bg)',
             display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center',
-            gap: 16, padding: '32px 24px',
+            gap: 12, padding: '32px 24px',
+            animation: 'bpPaySuccess 0.28s ease both',
           }}
         >
+          <style>{`
+            @keyframes bpPaySuccess {
+              from { opacity: 0; transform: scale(0.96); }
+              to   { opacity: 1; transform: scale(1); }
+            }
+            @media (prefers-reduced-motion: reduce) {
+              .bp-pay-success-overlay { animation: none !important; }
+            }
+          `}</style>
           <div style={{
             width: 72, height: 72, borderRadius: '50%',
             background: 'rgba(74,93,63,0.14)',
@@ -469,11 +479,14 @@ export default function Pay() {
           }}>
             {I.check(34)}
           </div>
-          <div style={{ fontFamily: 'var(--serif)', fontSize: 22, textAlign: 'center', color: 'var(--ink)' }}>
+          <div style={{ fontFamily: 'var(--serif)', fontSize: 24, textAlign: 'center', color: 'var(--ink)' }}>
             {t('pay.successTitle')}
           </div>
-          <div style={{ fontSize: 13, color: 'var(--ink-3)', textAlign: 'center' }}>
+          <div style={{ fontSize: 14, color: 'var(--ink-2)', textAlign: 'center' }}>
             {t('pay.successSub')}
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--ink-3)', textAlign: 'center' }}>
+            {t('pay.successSub2')}
           </div>
         </div>
       )}

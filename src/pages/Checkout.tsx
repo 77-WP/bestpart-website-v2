@@ -4,7 +4,7 @@ import { useCart, cartTotal, itemTotal } from '../store/cart';
 import { useT } from '../i18n';
 import { supabase } from '../lib/supabase';
 import { I } from '../components/icons';
-import { SHOP, shopCloseLabel, computeSlots, roundUp5, minToHHMM, type ShopInfo } from '../config/shop';
+import { SHOP, shopCloseLabel, computeShopStatus, roundUp5, minToHHMM, type ShopStatus } from '../config/shop';
 import { TEST_MODE, ENABLE_BEAM, CURBSIDE_PROMPTPAY_ONLY } from '../config/env';
 import { LINKS } from '../config/links';
 import { saveLocalOrder } from '../lib/localOrders';
@@ -63,9 +63,9 @@ const inputBase: React.CSSProperties = {
   outline: 'none',
 };
 
-/* Build TEST_MODE-safe ShopInfo */
-function makeShopInfo(): ShopInfo {
-  const base = computeSlots();
+/* Build TEST_MODE-safe ShopStatus */
+function makeShopInfo(): ShopStatus {
+  const base = computeShopStatus();
   if (!TEST_MODE) return base;
   if (base.isOpen && base.slots.length > 0) return base;
   // Force open with ASAP slot when outside hours in TEST_MODE
@@ -74,9 +74,12 @@ function makeShopInfo(): ShopInfo {
   const nowMin = bkk.getUTCHours() * 60 + bkk.getUTCMinutes();
   const asapMin = roundUp5(nowMin + SHOP.prepMinutes);
   return {
-    isOpen:      true,
-    slots:       [{ label: minToHHMM(asapMin), diffMin: SHOP.prepMinutes, value: null, isAsap: true }],
-    nextOpenMsg: '',
+    isOpen:       true,
+    slots:        [{ label: minToHHMM(asapMin), diffMin: SHOP.prepMinutes, value: null, isAsap: true }],
+    nextOpenMsg:  '',
+    previewOpen:  false,
+    forcedClosed: false,
+    reopenAt:     null,
   };
 }
 
@@ -102,7 +105,7 @@ export default function Checkout() {
   }
 
   /* ── Shop info — recomputed every minute ────────────────── */
-  const [shopInfo, setShopInfo] = useState<ShopInfo>(makeShopInfo);
+  const [shopInfo, setShopInfo] = useState<ShopStatus>(makeShopInfo);
 
   /* ── Selected slot — undefined = not chosen ────────────── */
   // null = ASAP, "HH:MM" = fixed time, undefined = nothing chosen yet
@@ -327,14 +330,18 @@ export default function Checkout() {
       localStorage.removeItem(REMEMBER_KEY);
     }
 
-    // Save vehicle for next visit (only on success)
+    // Save vehicle only when user opts in (same gate as bp_contact)
     if (isCurbside && vehicleColor) {
-      localStorage.setItem(VEHICLE_KEY, JSON.stringify({
-        color:          vehicleColor,
-        colorOtherText: sanitizeVehicleText(colorOtherText),
-        brand:          vehicleBrand,
-        brandOtherText: sanitizeVehicleText(brandOtherText),
-      }));
+      if (remember) {
+        localStorage.setItem(VEHICLE_KEY, JSON.stringify({
+          color:          vehicleColor,
+          colorOtherText: sanitizeVehicleText(colorOtherText),
+          brand:          vehicleBrand,
+          brandOtherText: sanitizeVehicleText(brandOtherText),
+        }));
+      } else {
+        localStorage.removeItem(VEHICLE_KEY);
+      }
     }
 
     /* INSERT order_contacts — fail silently */
@@ -556,15 +563,13 @@ export default function Checkout() {
         <div style={{ fontSize: 12, color: 'var(--ink-2)', display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
           {method ? (
             <span style={{ color: 'var(--ink)', fontWeight: 600 }}>
-              {method === 'dine'     ? t('checkout.locationDine')
-               : method === 'curbside' ? t('checkout.locationCurbside')
-               : t('checkout.locationTakeaway')}
+              {method === 'dine'     ? t('checkout.locationDine', SHOP.branchName)
+               : method === 'curbside' ? t('checkout.locationCurbside', SHOP.branchName)
+               : t('checkout.locationTakeaway', SHOP.branchName)}
             </span>
           ) : (
             <span style={{ color: 'var(--ink-3)', marginRight: 2 }}>{t('checkout.pickupAt')}</span>
           )}
-          <span style={{ color: 'var(--ink-3)' }}>·</span>
-          <span style={{ fontFamily: 'var(--serif)', fontSize: 12.5, color: 'var(--ink)' }}>{SHOP.branchName}</span>
           <span style={{ color: 'var(--ink-3)' }}>·</span>
           <span style={{ color: 'var(--ink-3)' }}>{t('checkout.openUntil', shopCloseLabel())}</span>
           {LINKS.googleMaps && (
@@ -764,15 +769,20 @@ export default function Checkout() {
         </div>
 
         {/* Remember on this device checkbox */}
-        <label style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={remember}
-            onChange={e => setRemember(e.target.checked)}
-            style={{ width: 16, height: 16, accentColor: 'var(--ink)', cursor: 'pointer', flexShrink: 0 }}
-          />
-          <span style={{ fontSize: 12, color: 'var(--ink-2)' }}>{t('checkout.rememberLabel')}</span>
-        </label>
+        <div style={{ marginTop: 14 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={e => setRemember(e.target.checked)}
+              style={{ width: 16, height: 16, accentColor: 'var(--ink)', cursor: 'pointer', flexShrink: 0 }}
+            />
+            <span style={{ fontSize: 12, color: 'var(--ink-2)' }}>{t('checkout.rememberLabel')}</span>
+          </label>
+          <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 4, paddingLeft: 26 }}>
+            {t('checkout.rememberHelper')}
+          </div>
+        </div>
       </div>
 
       {/* ── 5. ชำระเงิน ─────────────────────────────────────── */}

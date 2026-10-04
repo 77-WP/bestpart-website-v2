@@ -40,6 +40,17 @@ export default function App() {
           TEST MODE
         </div>
       )}
+      {import.meta.env.VITE_VERCEL_ENV === 'preview' &&
+       import.meta.env.VITE_PREVIEW_OPEN === 'true' && (
+        <div style={{
+          position: 'fixed', bottom: 60, left: 12, zIndex: 9998,
+          background: '#1a5aff', color: '#fff',
+          fontSize: 9, fontWeight: 800, letterSpacing: '0.14em',
+          padding: '3px 8px', borderRadius: 4, pointerEvents: 'none',
+        }}>
+          PREVIEW
+        </div>
+      )}
     </BrowserRouter>
   );
 }

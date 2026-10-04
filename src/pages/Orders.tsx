@@ -283,6 +283,11 @@ export default function Orders() {
         <div style={{ fontSize: 13, lineHeight: 1.65, maxWidth: 260 }}>
           {t('orders.emptyMsg')}
         </div>
+        {t('orders.emptyCta') && (
+          <div style={{ fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.5, maxWidth: 260 }}>
+            {t('orders.emptyCta')}
+          </div>
+        )}
         <button
           onClick={() => navigate('/order')}
           style={{

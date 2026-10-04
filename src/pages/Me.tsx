@@ -97,35 +97,6 @@ export default function Me() {
         </div>
       </div>
 
-      {/* ── Bowl Circle — coming soon ── */}
-      <div style={{ padding: '0 18px' }}>
-        <div style={{
-          marginTop: -16,
-          padding: '18px 18px 16px',
-          borderRadius: 'var(--r-lg)',
-          background: 'var(--ink)', color: 'var(--bg)',
-          position: 'relative', overflow: 'hidden',
-          boxShadow: 'var(--sh-card)',
-        }}>
-          {/* Glow */}
-          <div style={{
-            position: 'absolute', right: -30, top: -30,
-            width: 140, height: 140, borderRadius: '50%',
-            background: 'rgba(181,81,30,0.30)',
-          }} />
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, position: 'relative' }}>
-            <div style={{ fontSize: 26, flexShrink: 0 }}>🎁</div>
-            <div>
-              <div className="kicker" style={{ color: 'var(--gold)' }}>BOWL CIRCLE · กำลังเตรียมพร้อม</div>
-              <div style={{ fontSize: 12, opacity: 0.85, marginTop: 6, lineHeight: 1.6 }}>
-                เราเก็บประวัติการสั่งของคุณไว้แล้ว<br />
-                เร็วๆ นี้คุณจะได้รับสิทธิพิเศษจากการเป็นลูกค้าประจำ
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* ── Favorites shortcut ── */}
       <div style={{ padding: '18px 18px 0' }}>
         <div style={{

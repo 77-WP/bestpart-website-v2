@@ -14,7 +14,7 @@ type MenuItemRow = {
   id: string; name_th: string; name_en: string;
   base_price: number; image_url: string | null;
   is_best_seller: boolean; is_active: boolean;
-  category_id: string; description_th: string | null;
+  category_id: string; description_th: string | null; description_en?: string | null;
 };
 type DbOption = {
   id: string; option_name_th: string; option_name_en: string;
@@ -122,7 +122,7 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
 
     supabase
       .from('menu_items')
-      .select('id, name_th, name_en, base_price, image_url, is_best_seller, is_active, category_id, description_th')
+      .select('id, name_th, name_en, base_price, image_url, is_best_seller, is_active, category_id, description_th, description_en')
       .eq('id', itemId)
       .single()
       .then(({ data, error }) => {
@@ -541,9 +541,9 @@ export function ProductSheet({ isShopOpen, shopNextOpen }: Props) {
                     <div style={{ fontFamily: 'var(--serif)', fontStyle: 'italic', color: 'var(--ink-3)', fontSize: 13, marginTop: 3 }}>
                       {lang === 'en' ? item.name_th : item.name_en}
                     </div>
-                    {item.description_th && (
+                    {(lang === 'en' ? (item.description_en || item.description_th) : item.description_th) && (
                       <div style={{ marginTop: 10, fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.7 }}>
-                        {item.description_th}
+                        {lang === 'en' ? (item.description_en || item.description_th) : item.description_th}
                       </div>
                     )}
 

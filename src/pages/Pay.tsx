@@ -53,13 +53,24 @@ export default function Pay() {
   const countdown = useCountdown(expiresAt);
   const qrBase64  = state.phase === 'ready' ? state.qrImage : null;
 
-  /* Navigate to track once paid */
+  const [showSuccess, setShowSuccess] = useState(false);
+  const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /* Navigate to track once paid — show success overlay first */
   const handlePaid = useCallback(() => {
     if (paidRef.current) return;
     paidRef.current = true;
     if (pollingRef.current) clearInterval(pollingRef.current);
-    navigate(`/track/${orderId}`, { replace: true });
+    setShowSuccess(true);
+    successTimerRef.current = setTimeout(() => {
+      navigate(`/track/${orderId}`, { replace: true });
+    }, 2200);
   }, [navigate, orderId]);
+
+  /* Cleanup success timer on unmount */
+  useEffect(() => () => {
+    if (successTimerRef.current) clearTimeout(successTimerRef.current);
+  }, []);
 
   /* Fetch / refresh QR from edge function */
   const fetchQr = useCallback(async () => {
@@ -376,13 +387,16 @@ export default function Pay() {
           <div style={{
             marginTop: 20, marginBottom: 8,
             display: 'flex', alignItems: 'center', gap: 8,
-            fontSize: 11, color: 'var(--ink-3)',
+            fontSize: 12, color: 'var(--ink-2)', fontWeight: 500,
           }}>
             <span style={{
               width: 7, height: 7, borderRadius: '50%', background: 'var(--accent-2)',
               flexShrink: 0,
               animation: 'bp-pulse 1.8s ease-in-out infinite',
             }} />
+            {t('pay.waitingStatus')}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--ink-3)', marginBottom: 8 }}>
             {t('pay.waitingMsg')}
           </div>
         </div>
@@ -429,6 +443,38 @@ export default function Pay() {
           >
             {t('pay.retryBtn')}
           </button>
+        </div>
+      )}
+
+      {/* Payment success overlay */}
+      {showSuccess && (
+        <div
+          onClick={() => {
+            if (successTimerRef.current) clearTimeout(successTimerRef.current);
+            navigate(`/track/${orderId}`, { replace: true });
+          }}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 200,
+            background: 'var(--bg)',
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            gap: 16, padding: '32px 24px',
+          }}
+        >
+          <div style={{
+            width: 72, height: 72, borderRadius: '50%',
+            background: 'rgba(74,93,63,0.14)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: 'var(--accent-2)',
+          }}>
+            {I.check(34)}
+          </div>
+          <div style={{ fontFamily: 'var(--serif)', fontSize: 22, textAlign: 'center', color: 'var(--ink)' }}>
+            {t('pay.successTitle')}
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--ink-3)', textAlign: 'center' }}>
+            {t('pay.successSub')}
+          </div>
         </div>
       )}
 

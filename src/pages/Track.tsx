@@ -211,8 +211,14 @@ export default function Track() {
   /* ── Created time ─────────────────────────────────────── */
   const createdHHMM = toBkkHHMM(new Date(order.created_at));
 
+  /* ── Customer name from localStorage ─────────────────── */
+  const customerName = (() => {
+    const lo = getLocalOrders().find(o => o.id === order.id);
+    return lo?.name ?? '';
+  })();
+
   /* ── Hero config ──────────────────────────────────────── */
-  const hero = heroConfig(status, t);
+  const hero = heroConfig(status, t, customerName);
 
   const animStyle: React.CSSProperties = reducedMotion ? {} : {
     animation: `bpFadeIn 0.35s ease both`,
@@ -428,7 +434,7 @@ export default function Track() {
           {isDone
             ? t('track.collected')
             : isCash
-              ? t('track.cash', order.grand_total)
+              ? t('track.cash')
               : t('track.paid')}
         </div>
       </div>
@@ -489,26 +495,13 @@ export default function Track() {
             </div>
           </>
         ) : (
-          <>
-            <button
-              onClick={() => navigate('/order')}
-              style={{
-                display: 'block', width: '100%', marginBottom: 12,
-                padding: '13px 0', background: 'var(--ink)', color: 'var(--on-accent)',
-                border: 0, borderRadius: 'var(--r-pill)',
-                fontWeight: 700, fontSize: 14, cursor: 'pointer',
-              }}
-            >
-              {t('track.orderAgain')}
-            </button>
-            <a
-              href="/orders"
-              onClick={e => { e.preventDefault(); navigate('/orders'); }}
-              style={{ color: 'var(--ink-3)', textDecoration: 'underline', fontSize: 11 }}
-            >
-              {t('track.allOrders')}
-            </a>
-          </>
+          <a
+            href="/orders"
+            onClick={e => { e.preventDefault(); navigate('/orders'); }}
+            style={{ color: 'var(--ink-3)', textDecoration: 'underline', fontSize: 11 }}
+          >
+            {t('track.allOrders')}
+          </a>
         )}
       </div>
 
@@ -643,7 +636,7 @@ type HeroConf = {
   Icon:     () => React.ReactNode;
 };
 
-function heroConfig(status: string, t: (key: keyof Dict, ...args: any[]) => string): HeroConf {
+function heroConfig(status: string, t: (key: keyof Dict, ...args: any[]) => string, customerName: string): HeroConf {
   switch (status) {
     case 'awaiting_payment':
       return {
@@ -653,14 +646,16 @@ function heroConfig(status: string, t: (key: keyof Dict, ...args: any[]) => stri
         bg:       'rgba(184,134,46,0.14)',
         Icon:     () => I.qr(32),
       };
-    case 'pending':
+    case 'pending': {
+      const pendingSub = customerName ? t('track.pendingSub', customerName) : null;
       return {
         headline: t('track.pendingHeadline'),
-        sub:      null,
+        sub:      pendingSub || null,
         color:    'var(--gold)',
         bg:       'rgba(184,134,46,0.14)',
         Icon:     () => I.receipt(32),
       };
+    }
     case 'preparing':
       return {
         headline: t('track.preparingHeadline'),

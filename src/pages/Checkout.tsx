@@ -22,8 +22,9 @@ const FULFILLMENT_MAP: Record<string, string> = {
   curbside: 'curbside',
 };
 
-const CONTACT_KEY = 'bp_contact';
-const VEHICLE_KEY = 'bp_vehicle';
+const CONTACT_KEY  = 'bp_contact';
+const VEHICLE_KEY  = 'bp_vehicle';
+const REMEMBER_KEY = 'bp_contact_saved';
 
 const VEHICLE_COLORS: { id: string; bg: string; border?: string; labelKey: string }[] = [
   { id: 'white',  bg: '#FFFFFF', border: '#D0C8BC', labelKey: 'checkout.colorWhite'  },
@@ -131,6 +132,7 @@ export default function Checkout() {
   const [phone,        setPhone]        = useState('');
   const [nameTouched,  setNameTouched]  = useState(false);
   const [phoneTouched, setPhoneTouched] = useState(false);
+  const [remember,     setRemember]     = useState(() => localStorage.getItem(REMEMBER_KEY) === 'true');
 
   useEffect(() => {
     const saved = localStorage.getItem(CONTACT_KEY);
@@ -316,8 +318,14 @@ export default function Checkout() {
     const orderId = data.id;
     saveLocalOrder(orderId, new Date().toISOString(), name.trim());
 
-    // Save contact for next visit (only on success)
-    localStorage.setItem(CONTACT_KEY, JSON.stringify({ name: name.trim(), phone: digitsOnly(phone) }));
+    // Save contact only if user opted in
+    if (remember) {
+      localStorage.setItem(CONTACT_KEY, JSON.stringify({ name: name.trim(), phone: digitsOnly(phone) }));
+      localStorage.setItem(REMEMBER_KEY, 'true');
+    } else {
+      localStorage.removeItem(CONTACT_KEY);
+      localStorage.removeItem(REMEMBER_KEY);
+    }
 
     // Save vehicle for next visit (only on success)
     if (isCurbside && vehicleColor) {
@@ -376,6 +384,7 @@ export default function Checkout() {
         <div style={{ flex: 1 }}>
           <div className="kicker">{t('checkout.kicker')}</div>
           <div style={{ fontFamily: 'var(--serif)', fontSize: 16, marginTop: 1 }}>{t('checkout.title')}</div>
+          <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>{t('checkout.subtitle')}</div>
         </div>
       </div>
 
@@ -542,11 +551,19 @@ export default function Checkout() {
         </div>
       )}
 
-      {/* ── 2. รับที่ (single line, hidden branch-picker component kept) ── */}
-      {/* Branch picker component kept but not rendered — for future multi-branch use */}
+      {/* ── 2. Location line ──────────────────────────────────── */}
       <div style={{ padding: '12px 18px 0' }}>
         <div style={{ fontSize: 12, color: 'var(--ink-2)', display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-          <span style={{ color: 'var(--ink-3)', marginRight: 2 }}>{t('checkout.pickupAt')}</span>
+          {method ? (
+            <span style={{ color: 'var(--ink)', fontWeight: 600 }}>
+              {method === 'dine'     ? t('checkout.locationDine')
+               : method === 'curbside' ? t('checkout.locationCurbside')
+               : t('checkout.locationTakeaway')}
+            </span>
+          ) : (
+            <span style={{ color: 'var(--ink-3)', marginRight: 2 }}>{t('checkout.pickupAt')}</span>
+          )}
+          <span style={{ color: 'var(--ink-3)' }}>·</span>
           <span style={{ fontFamily: 'var(--serif)', fontSize: 12.5, color: 'var(--ink)' }}>{SHOP.branchName}</span>
           <span style={{ color: 'var(--ink-3)' }}>·</span>
           <span style={{ color: 'var(--ink-3)' }}>{t('checkout.openUntil', shopCloseLabel())}</span>
@@ -709,8 +726,10 @@ export default function Checkout() {
               border: nameTouched && !nameOk ? '1.5px solid var(--accent)' : '1px solid var(--line)',
             }}
           />
-          {nameTouched && !nameOk && (
+          {nameTouched && !nameOk ? (
             <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4 }}>{t('checkout.nameError')}</div>
+          ) : (
+            <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 4 }}>{t('checkout.nameHelper')}</div>
           )}
         </div>
 
@@ -735,20 +754,25 @@ export default function Checkout() {
               border: phoneTouched && !phoneOk ? '1.5px solid var(--accent)' : '1px solid var(--line)',
             }}
           />
-          {phoneTouched && !phoneOk && (
+          {phoneTouched && !phoneOk ? (
             <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4 }}>
               {phone.trim() === '' ? t('checkout.phoneErrorEmpty') : t('checkout.phoneErrorInvalid')}
             </div>
+          ) : (
+            <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 4 }}>{t('checkout.phoneHelper')}</div>
           )}
         </div>
 
-        {/* PDPA — keep exactly as-is */}
-        <div style={{ marginTop: 10, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-          <span style={{ color: 'var(--accent-2)', flexShrink: 0, marginTop: 1 }}>{I.check(12)}</span>
-          <span style={{ fontSize: 10.5, color: 'var(--ink-3)', lineHeight: 1.55 }}>
-            {t('checkout.pdpaText')}
-          </span>
-        </div>
+        {/* Remember on this device checkbox */}
+        <label style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={remember}
+            onChange={e => setRemember(e.target.checked)}
+            style={{ width: 16, height: 16, accentColor: 'var(--ink)', cursor: 'pointer', flexShrink: 0 }}
+          />
+          <span style={{ fontSize: 12, color: 'var(--ink-2)' }}>{t('checkout.rememberLabel')}</span>
+        </label>
       </div>
 
       {/* ── 5. ชำระเงิน ─────────────────────────────────────── */}
@@ -854,8 +878,12 @@ export default function Checkout() {
           <div style={{
             marginBottom: 8, padding: '10px 14px', borderRadius: 'var(--r-md)',
             background: 'rgba(178,58,31,0.10)', color: 'var(--accent)',
+            border: '1px solid rgba(178,58,31,0.28)',
             fontSize: 12, textAlign: 'center',
-          }}>{error}</div>
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+          }}>
+            {I.info(14)} {error}
+          </div>
         )}
         {submitHint && !error && (
           <div style={{

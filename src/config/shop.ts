@@ -23,21 +23,31 @@ export function shopCloseLabel(): string {
   return `${String(SHOP.closeHour).padStart(2, '0')}:${String(SHOP.closeMinute).padStart(2, '0')}`;
 }
 
+/** Round minutes up to the nearest multiple of 5 */
+export function roundUp5(m: number): number { return Math.ceil(m / 5) * 5; }
+
+/** Convert total minutes-of-day to "HH:MM" */
+export function minToHHMM(m: number): string {
+  const h   = Math.floor(m / 60);
+  const min = m % 60;
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+}
+
 // ---------------------------------------------------------------------------
-// Time-slot generation (call once per Checkout mount)
+// Time-slot generation
 // ---------------------------------------------------------------------------
 
 export interface TimeSlot {
-  label:  string;
-  sub:    string;
-  value:  string | null; // null = ASAP (DB pickup_time = NULL), "HH:MM" for fixed slots
+  label:   string;        // "HH:MM" clock time — shown large in card
+  diffMin: number;        // minutes from now (for "ใน ~X นาที" sub-line)
+  value:   string | null; // null = ASAP (DB pickup_time = NULL), "HH:MM" for fixed
   isAsap?: boolean;
 }
 
 export interface ShopInfo {
-  isOpen:       boolean;
-  slots:        TimeSlot[];
-  nextOpenMsg:  string; // e.g. "วันจันทร์ 11:30"
+  isOpen:      boolean;
+  slots:       TimeSlot[];
+  nextOpenMsg: string; // e.g. "วันจันทร์ 11:30"
 }
 
 const THAI_DAYS = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
@@ -48,16 +58,20 @@ function openLabel(): string {
 
 function nextOpenMsg(dow: number, nowMin: number): string {
   const openMin = SHOP.openHour * 60 + SHOP.openMinute;
-  // Before open today (not a closed day)
   if (!SHOP.closedDays.includes(dow) && nowMin < openMin) {
     return `วันนี้ ${openLabel()}`;
   }
-  // After close or closed day — find next open weekday
   let next = (dow + 1) % 7;
   while (SHOP.closedDays.includes(next)) next = (next + 1) % 7;
   return `วัน${THAI_DAYS[next]} ${openLabel()}`;
 }
 
+/**
+ * Compute up to 5 pickup time slots for the current Bangkok time:
+ *   slot 0 — ASAP  : now + prepMinutes, rounded up to nearest 5 min, value = null
+ *   slots 1–4      : now + 30 / 45 / 60 / 90 min, rounded up to 5 min
+ * Slots past close time or duplicate times are skipped.
+ */
 export function computeSlots(): ShopInfo {
   const now    = new Date();
   const bkk    = new Date(now.getTime() + 7 * 60 * 60 * 1000); // UTC+7
@@ -77,23 +91,31 @@ export function computeSlots(): ShopInfo {
   }
 
   const slots: TimeSlot[] = [];
+  const seen  = new Set<number>();
 
-  // "พร้อมเร็วสุด" — value null → DB stores NULL for pickup_time
-  slots.push({
-    label:  'พร้อมเร็วสุด',
-    sub:    `~${SHOP.prepMinutes} นาที`,
-    value:  null,
-    isAsap: true,
-  });
+  // ASAP slot
+  const asapMin = roundUp5(nowMin + SHOP.prepMinutes);
+  if (asapMin < closeMin) {
+    seen.add(asapMin);
+    slots.push({
+      label:   minToHHMM(asapMin),
+      diffMin: asapMin - nowMin,
+      value:   null,
+      isAsap:  true,
+    });
+  }
 
-  // Regular 15-min slots from (now + prep, rounded up) to close
-  const firstSlotMin = Math.ceil((nowMin + SHOP.prepMinutes) / 15) * 15;
-  for (let m = firstSlotMin; m < closeMin; m += 15) {
-    const h   = Math.floor(m / 60);
-    const min = m % 60;
-    const label = `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
-    const diff  = m - nowMin;
-    slots.push({ label, sub: `ใน ${diff} นาที`, value: label });
+  // Fixed-offset slots: +30, +45, +60, +90 min, each rounded up to 5 min
+  for (const offset of [30, 45, 60, 90]) {
+    const slotMin = roundUp5(nowMin + offset);
+    if (slotMin >= closeMin) continue;
+    if (seen.has(slotMin)) continue;
+    seen.add(slotMin);
+    slots.push({
+      label:   minToHHMM(slotMin),
+      diffMin: slotMin - nowMin,
+      value:   minToHHMM(slotMin),
+    });
   }
 
   return { isOpen: true, slots, nextOpenMsg: '' };

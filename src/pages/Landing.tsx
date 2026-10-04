@@ -206,19 +206,31 @@ export default function Landing() {
             icon={I.dinein(26)}
             label="ทานที่ร้าน"
             sublabel="Dine-in"
-            onClick={() => navigate('/order?method=dine-in')}
+            onClick={() => {
+              sessionStorage.setItem('bp_method', 'dine');
+              sessionStorage.setItem('bp_method_chosen', 'true');
+              navigate('/order?method=dine-in');
+            }}
           />
           <ServiceBtn
             icon={I.bag(26)}
             label="รับกลับบ้าน"
             sublabel="Takeaway"
-            onClick={() => navigate('/order?method=takeaway')}
+            onClick={() => {
+              sessionStorage.setItem('bp_method', 'takeaway');
+              sessionStorage.setItem('bp_method_chosen', 'true');
+              navigate('/order?method=takeaway');
+            }}
           />
           <ServiceBtn
             icon={I.car(26)}
             label="เสิร์ฟถึงรถ"
             sublabel="Curbside"
-            onClick={() => navigate('/order?method=curbside')}
+            onClick={() => {
+              sessionStorage.setItem('bp_method', 'curbside');
+              sessionStorage.setItem('bp_method_chosen', 'true');
+              navigate('/order?method=curbside');
+            }}
           />
           {deliveryLinks.length > 0 && (
             <ServiceBtn

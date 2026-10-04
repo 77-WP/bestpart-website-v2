@@ -1,21 +1,20 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart, cartTotal, itemTotal } from '../store/cart';
+import { useLang } from '../store/lang';
+import { LANG_MAP } from '../config/lang';
 import { supabase } from '../lib/supabase';
 import { I } from '../components/icons';
-import { SHOP, shopCloseLabel, computeSlots, type ShopInfo } from '../config/shop';
+import { SHOP, shopCloseLabel, computeSlots, roundUp5, minToHHMM, type ShopInfo } from '../config/shop';
 import { TEST_MODE, ENABLE_BEAM } from '../config/env';
+import { LINKS } from '../config/links';
 import { saveLocalOrder } from '../lib/localOrders';
 
+/* ── Constants ───────────────────────────────────────────── */
 const METHODS = [
-  { id: 'dine',     label: 'ทานที่ร้าน', labelEn: 'Dine-in' },
-  { id: 'takeaway', label: 'รับกลับ',    labelEn: 'Takeaway' },
-  { id: 'curbside', label: 'ถึงรถ',      labelEn: 'Curbside' },
-];
-
-const PAYMENT_OPTS = [
-  { id: 'promptpay', label: 'PromptPay QR', sub: 'ผ่าน Beam · สแกนจ่ายทันที', icon: I.qr(16) },
-  { id: 'cash',      label: 'เงินสดที่ร้าน', sub: 'Pay at counter',             icon: I.cash(16) },
+  { id: 'dine',     key: 'methodDine'     as const },
+  { id: 'takeaway', key: 'methodTakeaway' as const },
+  { id: 'curbside', key: 'methodCurbside' as const },
 ];
 
 const FULFILLMENT_MAP: Record<string, string> = {
@@ -24,7 +23,12 @@ const FULFILLMENT_MAP: Record<string, string> = {
   curbside: 'curbside',
 };
 
-/* ── input shared style ──────────────────────────────────── */
+const CONTACT_KEY = 'bp_contact';
+
+/* ── Helpers ─────────────────────────────────────────────── */
+function digitsOnly(v: string) { return v.replace(/\D/g, ''); }
+function isPhoneOk(v: string)  { return /^\d{10}$/.test(digitsOnly(v)); }
+
 const inputBase: React.CSSProperties = {
   width: '100%',
   background: 'var(--bg-2)',
@@ -37,49 +41,158 @@ const inputBase: React.CSSProperties = {
   outline: 'none',
 };
 
-/* ── phone helpers ───────────────────────────────────────── */
-function digitsOnly(v: string) { return v.replace(/\D/g, ''); }
-function isPhoneOk(v: string)  { return /^\d{10}$/.test(digitsOnly(v)); }
+/* Build TEST_MODE-safe ShopInfo */
+function makeShopInfo(): ShopInfo {
+  const base = computeSlots();
+  if (!TEST_MODE) return base;
+  if (base.isOpen && base.slots.length > 0) return base;
+  // Force open with ASAP slot when outside hours in TEST_MODE
+  const now    = new Date();
+  const bkk    = new Date(now.getTime() + 7 * 3600 * 1000);
+  const nowMin = bkk.getUTCHours() * 60 + bkk.getUTCMinutes();
+  const asapMin = roundUp5(nowMin + SHOP.prepMinutes);
+  return {
+    isOpen:      true,
+    slots:       [{ label: minToHHMM(asapMin), diffMin: SHOP.prepMinutes, value: null, isAsap: true }],
+    nextOpenMsg: '',
+  };
+}
 
+/* ── Component ───────────────────────────────────────────── */
 export default function Checkout() {
-  const navigate = useNavigate();
+  const navigate       = useNavigate();
   const { items, clear } = useCart();
+  const { lang }       = useLang();
+  const L              = LANG_MAP[lang];
 
-  /* compute once at mount — slots depend on current Bangkok time */
-  const [shopInfo] = useState<ShopInfo>(() => {
-    const base = computeSlots();
-    if (!TEST_MODE) return base;
-    // TEST_MODE: shop is always open; ensure at least the ASAP slot exists
-    const slots = base.slots.length > 0
-      ? base.slots
-      : [{ label: 'พร้อมเร็วสุด', sub: `~${SHOP.prepMinutes} นาที`, value: null, isAsap: true as const }];
-    return { isOpen: true, slots, nextOpenMsg: '' };
+  /* ── Method — null = not yet chosen this session ───────── */
+  const [method, setMethodState] = useState<string | null>(() => {
+    if (sessionStorage.getItem('bp_method_chosen') === 'true') {
+      return sessionStorage.getItem('bp_method') ?? null;
+    }
+    return null;
   });
 
-  const [method,    setMethod]  = useState('takeaway');
-  const [timeSlot,  setTime]    = useState(0);
-  const [payment,   setPayment] = useState(ENABLE_BEAM ? 'promptpay' : 'cash');
+  function chooseMethod(id: string) {
+    sessionStorage.setItem('bp_method', id);
+    sessionStorage.setItem('bp_method_chosen', 'true');
+    setMethodState(id);
+    setSlotExpiredMsg(false);
+  }
 
-  const [name,      setName]    = useState('');
-  const [phone,     setPhone]   = useState('');
+  /* ── Shop info — recomputed every minute ────────────────── */
+  const [shopInfo, setShopInfo] = useState<ShopInfo>(makeShopInfo);
+
+  /* ── Selected slot — undefined = not chosen ────────────── */
+  // null = ASAP, "HH:MM" = fixed time, undefined = nothing chosen yet
+  const [selSlot,        setSelSlot]        = useState<string | null | undefined>(undefined);
+  const [slotExpiredMsg, setSlotExpiredMsg] = useState(false);
+
+  const recompute = useCallback(() => {
+    const fresh = makeShopInfo();
+    setShopInfo(fresh);
+    // If a fixed slot was selected and it no longer exists, deselect
+    if (typeof selSlot === 'string') {
+      const stillValid = fresh.slots.some(s => s.value === selSlot);
+      if (!stillValid) {
+        setSelSlot(undefined);
+        setSlotExpiredMsg(true);
+      }
+    }
+  }, [selSlot]);
+
+  useEffect(() => {
+    const t = setInterval(recompute, 60_000);
+    return () => clearInterval(t);
+  }, [recompute]);
+
+  /* ── Contact — prefill from localStorage ───────────────── */
+  const [name,         setName]         = useState('');
+  const [phone,        setPhone]        = useState('');
   const [nameTouched,  setNameTouched]  = useState(false);
   const [phoneTouched, setPhoneTouched] = useState(false);
 
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState<string | null>(null);
+  useEffect(() => {
+    const saved = localStorage.getItem(CONTACT_KEY);
+    if (saved) {
+      try {
+        const { name: n, phone: p } = JSON.parse(saved);
+        if (n) setName(n);
+        if (p) setPhone(p);
+      } catch { /* ignore */ }
+    }
+  }, []);
 
-  const subtotal = cartTotal(items);
-  const total    = subtotal; // no packaging, no discount
+  /* ── Payment ─────────────────────────────────────────────  */
+  const [payment, setPayment] = useState(ENABLE_BEAM ? 'promptpay' : 'cash');
 
-  const nameOk  = name.trim().length > 0;
-  const phoneOk = isPhoneOk(phone);
-  const canSubmit = shopInfo.isOpen && nameOk && phoneOk && !loading;
+  /* ── Summary collapsible ─────────────────────────────────  */
+  const [summaryOpen, setSummaryOpen] = useState(false);
 
+  /* ── Submission state ───────────────────────────────────── */
+  const [loading, setLoading]   = useState(false);
+  const [error,   setError]     = useState<string | null>(null);
+  const [submitHint, setSubmitHint] = useState<string | null>(null);
+
+  /* ── Refs for scroll-to-error ────────────────────────────  */
+  const methodRef  = useRef<HTMLDivElement>(null);
+  const timeRef    = useRef<HTMLDivElement>(null);
+  const nameRef    = useRef<HTMLInputElement>(null);
+  const phoneRef   = useRef<HTMLInputElement>(null);
+
+  /* ── Computed ────────────────────────────────────────────  */
+  const subtotal   = cartTotal(items);
+  const total      = subtotal;
+  const itemCount  = items.reduce((s, i) => s + i.qty, 0);
+  const nameOk     = name.trim().length > 0;
+  const phoneOk    = isPhoneOk(phone);
+
+  // Which fixed slot (if any) is currently selected — for confirmation line
+  const selectedSlotObj = selSlot === null
+    ? shopInfo.slots.find(s => s.isAsap) ?? null
+    : shopInfo.slots.find(s => s.value === selSlot) ?? null;
+
+  /* ── Submit ──────────────────────────────────────────────  */
   async function handleConfirm() {
-    /* ensure all fields touched so errors become visible */
     setNameTouched(true);
     setPhoneTouched(true);
-    if (!canSubmit) return;
+    setSubmitHint(null);
+
+    // Validate in order — scroll to first issue
+    if (!method) {
+      setSubmitHint(L.validMethod);
+      methodRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    if (selSlot === undefined) {
+      setSubmitHint(L.validTime);
+      timeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
+    // Re-check slot validity at submit time
+    const currentInfo = makeShopInfo();
+    if (typeof selSlot === 'string' && !currentInfo.slots.some(s => s.value === selSlot)) {
+      setSelSlot(undefined);
+      setSlotExpiredMsg(true);
+      setSubmitHint(L.validTime);
+      timeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
+    if (!nameOk) {
+      setSubmitHint(L.validName);
+      nameRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      nameRef.current?.focus();
+      return;
+    }
+    if (!phoneOk) {
+      setSubmitHint(L.validPhone);
+      phoneRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      phoneRef.current?.focus();
+      return;
+    }
+    if (!shopInfo.isOpen) return;
 
     setLoading(true);
     setError(null);
@@ -96,11 +209,10 @@ export default function Checkout() {
       addons:     it.addons,
     }));
 
-    const selectedSlot = shopInfo.slots[timeSlot];
     const isBeam = payment === 'promptpay';
 
-    // Sanitize: only accept "HH:MM" or "HH:MM:SS" — anything else (including text) → null
-    const rawPickup = selectedSlot?.value ?? null;
+    // Sanitize: only accept "HH:MM" — anything else → null
+    const rawPickup  = selSlot ?? null;
     const pickupTime = rawPickup && /^\d{2}:\d{2}(:\d{2})?$/.test(rawPickup) ? rawPickup : null;
 
     const insertPayload = {
@@ -137,15 +249,16 @@ export default function Checkout() {
       setError(
         TEST_MODE && dbError
           ? `[INSERT orders] ${dbError.message}${dbError.code ? ` / ${dbError.code}` : ''}`
-          : 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง'
+          : L.orderError
       );
       return;
     }
 
     const orderId = data.id;
-
-    /* Persist order id locally so the Orders tab can show it without auth */
     saveLocalOrder(orderId, new Date().toISOString());
+
+    // Save contact for next visit (only on success)
+    localStorage.setItem(CONTACT_KEY, JSON.stringify({ name: name.trim(), phone: digitsOnly(phone) }));
 
     /* INSERT order_contacts — fail silently */
     supabase
@@ -153,158 +266,246 @@ export default function Checkout() {
       .insert({ order_id: orderId, name: name.trim(), phone: digitsOnly(phone) })
       .then(({ error: contactErr }) => {
         if (contactErr) console.error('[INSERT order_contacts] failed:', {
-          message: contactErr.message,
-          code:    contactErr.code,
-          details: contactErr.details,
-          hint:    contactErr.hint,
+          message: contactErr.message, code: contactErr.code,
+          details: contactErr.details, hint: contactErr.hint,
         });
       });
 
     clear();
 
     if (isBeam) {
-      /* Beam path — navigate to /pay first; Pay page calls create-beam-charge */
       navigate(`/pay/${orderId}`);
     } else {
       navigate(`/track/${orderId}`);
     }
   }
 
+  /* ── Render ──────────────────────────────────────────────── */
   return (
-    <div className="page" style={{ paddingBottom: 110 }}>
-      {/* TEST MODE banner — only visible when VITE_TEST_MODE=true in .env.local */}
+    <div className="page" style={{ paddingBottom: 120 }}>
+
+      {/* TEST MODE banner */}
       {TEST_MODE && (
         <div style={{
-          background: '#b45309',
-          color: '#fffdf8',
-          fontSize: 10,
-          fontWeight: 700,
-          letterSpacing: '0.12em',
-          textAlign: 'center',
-          padding: '5px 0',
+          background: '#b45309', color: '#fffdf8',
+          fontSize: 10, fontWeight: 700, letterSpacing: '0.12em',
+          textAlign: 'center', padding: '5px 0',
         }}>
-          ⚠ TEST MODE — ห้ามใช้บัตรจริง
+          TEST MODE — ห้ามใช้บัตรจริง
         </div>
       )}
+
       {/* Header */}
       <div style={{
         padding: '14px 18px 8px', display: 'flex', alignItems: 'center',
         gap: 12, borderBottom: '1px solid var(--line)',
       }}>
-        <button onClick={() => navigate('/cart')} style={{ background: 'none', border: 0, padding: 0, color: 'var(--ink)' }}>
+        <button onClick={() => navigate('/cart')}
+          style={{ background: 'none', border: 0, padding: 0, color: 'var(--ink)' }}>
           {I.back(22)}
         </button>
         <div style={{ flex: 1 }}>
-          <div className="kicker">ขั้นตอนสุดท้าย · CHECKOUT</div>
-          <div style={{ fontFamily: 'var(--serif)', fontSize: 16, marginTop: 1 }}>ยืนยันออเดอร์</div>
+          <div className="kicker">{L.checkoutKicker}</div>
+          <div style={{ fontFamily: 'var(--serif)', fontSize: 16, marginTop: 1 }}>{L.checkoutTitle}</div>
         </div>
       </div>
 
-      {/* Method tabs */}
-      <div style={{ padding: '16px 18px 0' }}>
-        <div className="kicker muted" style={{ marginBottom: 8 }}>วิธีรับ · METHOD</div>
+      {/* ── 1. วิธีรับ ──────────────────────────────────────── */}
+      <div ref={methodRef} style={{ padding: '18px 18px 0' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', color: 'var(--ink-3)', textTransform: 'uppercase', marginBottom: 8 }}>
+          {L.sectionMethod}
+        </div>
         <div style={{
           display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6,
-          padding: 4, borderRadius: 'var(--r-md)', background: 'var(--bg-3)',
+          padding: 4, borderRadius: 'var(--r-md)',
+          background: 'var(--bg-3)',
+          outline: submitHint === L.validMethod && !method ? '1.5px solid var(--accent)' : 'none',
+          outlineOffset: 2,
         }}>
           {METHODS.map(m => (
             <button
               key={m.id}
-              onClick={() => setMethod(m.id)}
+              onClick={() => chooseMethod(m.id)}
               style={{
                 padding: '10px 6px', borderRadius: 'var(--r-sm)',
                 background: method === m.id ? 'var(--bg)' : 'transparent',
-                border: 0, boxShadow: method === m.id ? 'var(--sh-card)' : 'none',
+                border: 0,
+                boxShadow: method === m.id ? 'var(--sh-card)' : 'none',
               }}
             >
-              <div style={{ fontFamily: 'var(--serif)', fontSize: 12, color: method === m.id ? 'var(--ink)' : 'var(--ink-2)' }}>
-                {m.label}
+              <div style={{
+                fontFamily: 'var(--serif)', fontSize: 12,
+                color: method === m.id ? 'var(--ink)' : 'var(--ink-3)',
+              }}>
+                {L[m.key]}
               </div>
-              <div style={{ fontSize: 9, color: 'var(--ink-3)', marginTop: 2 }}>{m.labelEn}</div>
             </button>
           ))}
         </div>
+        {submitHint === L.validMethod && !method && (
+          <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 5 }}>{L.validMethod}</div>
+        )}
       </div>
 
-      {/* Branch */}
-      <div style={{ padding: '18px 18px 0' }}>
-        <div style={{
-          padding: '14px', borderRadius: 'var(--r-md)', background: 'var(--bg-2)',
-          border: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 12,
-        }}>
-          <div style={{
-            width: 40, height: 40, borderRadius: '50%', background: 'var(--accent-2)',
-            color: '#fff', display: 'grid', placeItems: 'center',
-          }}>{I.pin(18)}</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '.06em', textTransform: 'uppercase' }}>รับที่</div>
-            <div style={{ fontFamily: 'var(--serif)', fontSize: 14 }}>{SHOP.branchName}</div>
-            <div style={{ fontSize: 11, color: 'var(--ink-2)', marginTop: 1 }}>
-              เปิดถึง {shopCloseLabel()}
-            </div>
-          </div>
-          <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>เปลี่ยน</span>
+      {/* ── 2. รับที่ (single line, hidden branch-picker component kept) ── */}
+      {/* Branch picker component kept but not rendered — for future multi-branch use */}
+      <div style={{ padding: '12px 18px 0' }}>
+        <div style={{ fontSize: 12, color: 'var(--ink-2)', display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+          <span style={{ color: 'var(--ink-3)', marginRight: 2 }}>{lang === 'th' ? 'รับที่' : 'Pickup at'}</span>
+          <span style={{ fontFamily: 'var(--serif)', fontSize: 12.5, color: 'var(--ink)' }}>{SHOP.branchName}</span>
+          <span style={{ color: 'var(--ink-3)' }}>·</span>
+          <span style={{ color: 'var(--ink-3)' }}>{L.openUntil(shopCloseLabel())}</span>
+          {LINKS.googleMaps && (
+            <>
+              <span style={{ color: 'var(--ink-3)' }}>·</span>
+              <a
+                href={LINKS.googleMaps}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: 'var(--accent)', fontWeight: 600, fontSize: 12, textDecoration: 'none' }}
+              >
+                {L.mapLink}
+              </a>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Time */}
-      <div style={{ padding: '18px 18px 0' }}>
-        <div className="kicker muted" style={{ marginBottom: 8 }}>เวลารับ · PICKUP TIME</div>
+      {/* ── 3. เวลารับ ──────────────────────────────────────── */}
+      <div ref={timeRef} style={{ padding: '18px 18px 0' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', color: 'var(--ink-3)', textTransform: 'uppercase', marginBottom: 8 }}>
+          {L.sectionTime}
+        </div>
 
-        {shopInfo.isOpen ? (
-          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginRight: -18, paddingRight: 18 }}>
-            {shopInfo.slots.map((s, i) => (
-              <button
-                key={i}
-                onClick={() => setTime(i)}
-                style={{
-                  padding: '10px 14px', borderRadius: 'var(--r-md)',
-                  border: i === timeSlot ? '1.5px solid var(--ink)' : '1px solid var(--line)',
-                  background: i === timeSlot ? 'var(--bg-2)' : 'var(--bg)',
-                  minWidth: 108, textAlign: 'left', flexShrink: 0,
-                }}
-              >
-                <div style={{
-                  fontFamily: 'var(--serif)', fontSize: 13,
-                  color: i === timeSlot ? 'var(--ink)' : 'var(--ink-2)',
-                  display: 'flex', alignItems: 'center', gap: 4,
-                }}>
-                  {s.isAsap && <span style={{ color: 'var(--accent)' }}>{I.flame(12)}</span>}
-                  {s.label}
-                </div>
-                <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 2 }}>{s.sub}</div>
-              </button>
-            ))}
+        {/* Method not chosen yet */}
+        {!method && (
+          <div style={{
+            padding: '12px 14px', borderRadius: 'var(--r-md)',
+            background: 'var(--bg-2)', border: '1px solid var(--line)',
+            fontSize: 13, color: 'var(--ink-3)',
+          }}>
+            {L.timeChooseMethodFirst}
           </div>
-        ) : (
+        )}
+
+        {/* Shop closed */}
+        {method && !shopInfo.isOpen && (
           <div style={{
             padding: '12px 14px', borderRadius: 'var(--r-md)',
             background: 'rgba(43,33,24,0.06)', border: '1px solid var(--line)',
             fontSize: 13, color: 'var(--ink-2)',
           }}>
-            <span style={{ fontWeight: 600, color: 'var(--ink)' }}>ร้านปิดอยู่</span>
-            {' · เปิดครั้งถัดไป '}
-            <span style={{ fontFamily: 'var(--mono)', fontWeight: 600 }}>{shopInfo.nextOpenMsg}</span>
+            <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{L.shopClosedLabel}</span>
+            {' · '}<span style={{ fontFamily: 'var(--mono)', fontWeight: 600 }}>{shopInfo.nextOpenMsg}</span>
           </div>
+        )}
+
+        {/* Near close — no slots available */}
+        {method && shopInfo.isOpen && shopInfo.slots.length === 0 && (
+          <div style={{
+            padding: '12px 14px', borderRadius: 'var(--r-md)',
+            background: 'rgba(43,33,24,0.06)', border: '1px solid var(--line)',
+            fontSize: 13, color: 'var(--ink-2)',
+          }}>
+            {L.timeNearCloseMsg}
+          </div>
+        )}
+
+        {/* Slot expired warning */}
+        {slotExpiredMsg && (
+          <div style={{ fontSize: 11, color: 'var(--accent)', marginBottom: 8 }}>
+            {L.timeExpiredMsg}
+          </div>
+        )}
+
+        {/* Time slots grid */}
+        {method && shopInfo.isOpen && shopInfo.slots.length > 0 && (
+          <>
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6,
+              outline: submitHint === L.validTime && selSlot === undefined ? '1.5px solid var(--accent)' : 'none',
+              outlineOffset: 3, borderRadius: 'var(--r-sm)',
+            }}>
+              {shopInfo.slots.map((s) => {
+                const isSelected = selSlot === s.value;
+                return (
+                  <button
+                    key={s.value ?? 'asap'}
+                    onClick={() => {
+                      setSelSlot(s.value);
+                      setSlotExpiredMsg(false);
+                      setSubmitHint(null);
+                    }}
+                    style={{
+                      padding: '10px 10px 8px', borderRadius: 'var(--r-md)',
+                      border: isSelected ? '1.5px solid var(--ink)' : '1px solid var(--line)',
+                      background: isSelected ? 'var(--bg-2)' : 'var(--bg)',
+                      textAlign: 'left', position: 'relative',
+                    }}
+                  >
+                    {s.isAsap && (
+                      <span style={{
+                        position: 'absolute', top: 5, right: 6,
+                        fontSize: 9, fontWeight: 700, letterSpacing: '.05em',
+                        color: 'var(--accent)',
+                        background: 'rgba(178,58,31,0.10)',
+                        padding: '1px 5px', borderRadius: 'var(--r-pill)',
+                      }}>
+                        {L.timeEarliestBadge}
+                      </span>
+                    )}
+                    <div style={{
+                      fontFamily: 'var(--mono)', fontSize: 16, fontWeight: 700,
+                      color: isSelected ? 'var(--ink)' : 'var(--ink-2)',
+                      lineHeight: 1.1, marginBottom: 3,
+                    }}>
+                      {s.label}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--ink-3)' }}>
+                      {L.timeInMin(s.diffMin)}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Confirmation line */}
+            {selSlot !== undefined && selectedSlotObj && (
+              <div style={{ marginTop: 8, fontSize: 11, color: 'var(--accent-2)', fontWeight: 600 }}>
+                {L.timeConfirm(selectedSlotObj.label)}
+              </div>
+            )}
+
+            {/* Validation hint */}
+            {submitHint === L.validTime && selSlot === undefined && (
+              <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 5 }}>{L.validTime}</div>
+            )}
+          </>
         )}
       </div>
 
-      {/* Contact */}
+      {/* ── 4. ผู้รับ ────────────────────────────────────────── */}
       <div style={{ padding: '18px 18px 0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
-          <div className="kicker muted">ผู้รับ · CONTACT</div>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', color: 'var(--ink-3)', textTransform: 'uppercase' }}>
+            {L.sectionContact}
+          </div>
           <span style={{
             fontSize: 9.5, fontWeight: 700, letterSpacing: '.05em', color: 'var(--accent-2)',
             background: 'rgba(74,93,63,0.14)', padding: '3px 8px', borderRadius: 'var(--r-pill)',
-          }}>สั่งแบบไม่ต้องสมัคร</span>
+          }}>
+            {L.noSignupBadge}
+          </span>
         </div>
 
         {/* Name */}
         <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 10, color: 'var(--ink-3)', marginBottom: 4 }}>ชื่อ</div>
+          <div style={{ fontSize: 10, color: 'var(--ink-3)', marginBottom: 4 }}>{L.nameLabel}</div>
           <input
+            ref={nameRef}
             type="text"
-            placeholder="ชื่อผู้รับ"
+            autoComplete="name"
+            placeholder={L.namePlaceholder}
             value={name}
             onChange={e => setName(e.target.value)}
             onBlur={() => setNameTouched(true)}
@@ -314,18 +515,24 @@ export default function Checkout() {
             }}
           />
           {nameTouched && !nameOk && (
-            <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4 }}>กรุณากรอกชื่อ</div>
+            <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4 }}>{L.nameError}</div>
           )}
         </div>
 
         {/* Phone */}
         <div>
-          <div style={{ fontSize: 10, color: 'var(--ink-3)', marginBottom: 4 }}>เบอร์โทร</div>
+          <div style={{ fontSize: 10, color: 'var(--ink-3)', marginBottom: 4 }}>{L.phoneLabel}</div>
           <input
+            ref={phoneRef}
             type="tel"
-            placeholder="0812345678"
+            inputMode="tel"
+            autoComplete="tel"
+            placeholder={L.phonePlaceholder}
             value={phone}
-            onChange={e => setPhone(e.target.value)}
+            onChange={e => {
+              const digits = digitsOnly(e.target.value);
+              setPhone(digits.slice(0, 10));
+            }}
             onBlur={() => setPhoneTouched(true)}
             style={{
               ...inputBase,
@@ -335,23 +542,29 @@ export default function Checkout() {
           />
           {phoneTouched && !phoneOk && (
             <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4 }}>
-              {phone.trim() === '' ? 'กรุณากรอกเบอร์โทร' : 'เบอร์ต้องเป็นตัวเลข 10 หลัก'}
+              {phone.trim() === '' ? L.phoneErrorEmpty : L.phoneErrorInvalid}
             </div>
           )}
         </div>
 
+        {/* PDPA — keep exactly as-is */}
         <div style={{ marginTop: 10, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
           <span style={{ color: 'var(--accent-2)', flexShrink: 0, marginTop: 1 }}>{I.check(12)}</span>
           <span style={{ fontSize: 10.5, color: 'var(--ink-3)', lineHeight: 1.55 }}>
-            เก็บเบอร์และประวัติการสั่งเพื่อพัฒนาบริการ ใช้เพื่อ Best Part เท่านั้น
+            {L.pdpaText}
           </span>
         </div>
       </div>
 
-      {/* Payment */}
+      {/* ── 5. ชำระเงิน ─────────────────────────────────────── */}
       <div style={{ padding: '18px 18px 0' }}>
-        <div className="kicker muted" style={{ marginBottom: 8 }}>ชำระเงิน · PAYMENT</div>
-        {PAYMENT_OPTS.filter(p => ENABLE_BEAM || p.id !== 'promptpay').map(p => (
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', color: 'var(--ink-3)', textTransform: 'uppercase', marginBottom: 8 }}>
+          {L.sectionPayment}
+        </div>
+        {[
+          { id: 'promptpay', label: L.promptpayLabel, sub: L.promptpaySub, icon: I.qr(16) },
+          { id: 'cash',      label: L.cashLabel,      sub: L.cashSub,      icon: I.cash(16) },
+        ].filter(p => ENABLE_BEAM || p.id !== 'promptpay').map(p => (
           <label
             key={p.id}
             onClick={() => setPayment(p.id)}
@@ -376,53 +589,97 @@ export default function Checkout() {
         ))}
       </div>
 
-      {/* Totals mini */}
-      <div style={{ padding: '18px 18px 0', fontSize: 12, color: 'var(--ink-2)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span>{items.reduce((s, i) => s + i.qty, 0)} รายการ</span>
-          <span className="thb" style={{ fontFamily: 'var(--mono)' }}>{subtotal}</span>
-        </div>
+      {/* ── 6. สรุปรายการ ───────────────────────────────────── */}
+      <div style={{ padding: '18px 18px 0' }}>
+        <button
+          onClick={() => setSummaryOpen(o => !o)}
+          style={{
+            width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            background: 'none', border: '1px solid var(--line)', borderRadius: 'var(--r-md)',
+            padding: '12px 14px', cursor: 'pointer',
+          }}
+        >
+          <span style={{ fontFamily: 'var(--serif)', fontSize: 13, color: 'var(--ink)' }}>
+            {L.sectionSummary}
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--ink-2)' }}>
+            <span style={{ fontFamily: 'var(--mono)' }}>{L.summaryNItems(itemCount, total)}</span>
+            {I.chevron(14, summaryOpen ? 'up' : 'down')}
+          </span>
+        </button>
+
+        {summaryOpen && (
+          <div style={{
+            marginTop: 4, border: '1px solid var(--line)',
+            borderTop: 'none', borderRadius: '0 0 var(--r-md) var(--r-md)',
+            padding: '8px 14px',
+          }}>
+            {items.map(it => (
+              <div key={it.cartId} style={{
+                display: 'flex', justifyContent: 'space-between',
+                padding: '4px 0', fontSize: 13, color: 'var(--ink-2)',
+              }}>
+                <span style={{ fontFamily: 'var(--serif)' }}>{it.name} ×{it.qty}</span>
+                <span style={{ fontFamily: 'var(--mono)', color: 'var(--ink)' }}>฿{itemTotal(it)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <button
+          onClick={() => navigate('/cart')}
+          style={{
+            marginTop: 6, background: 'none', border: 0, cursor: 'pointer', padding: 0,
+            fontSize: 11, color: 'var(--accent)', fontWeight: 600,
+          }}
+        >
+          {L.editCart}
+        </button>
       </div>
 
-      {/* Sticky pay button */}
+      {/* ── Sticky button ────────────────────────────────────── */}
       <div style={{
         position: 'fixed', left: '50%', transform: 'translateX(-50%)',
         bottom: 0, width: '100%', maxWidth: 480,
-        padding: '14px 18px 26px', background: 'var(--bg)', borderTop: '1px solid var(--line)', zIndex: 30,
+        padding: '12px 18px calc(env(safe-area-inset-bottom, 0px) + 18px)',
+        background: 'var(--bg)', borderTop: '1px solid var(--line)', zIndex: 30,
       }}>
         {error && (
           <div style={{
-            marginBottom: 10, padding: '10px 14px', borderRadius: 'var(--r-md)',
+            marginBottom: 8, padding: '10px 14px', borderRadius: 'var(--r-md)',
             background: 'rgba(178,58,31,0.10)', color: 'var(--accent)',
             fontSize: 12, textAlign: 'center',
           }}>{error}</div>
         )}
+        {submitHint && !error && (
+          <div style={{
+            marginBottom: 8, fontSize: 11, color: 'var(--accent)',
+            textAlign: 'center', fontWeight: 600,
+          }}>{submitHint}</div>
+        )}
         <button
           onClick={handleConfirm}
-          disabled={!canSubmit}
           style={{
             width: '100%',
-            background: canSubmit ? 'var(--accent)' : 'var(--ink-3)',
+            background: 'var(--accent)',
             color: 'var(--on-accent)',
             border: 0, padding: '16px 18px', borderRadius: 'var(--r-pill)',
             fontWeight: 600, fontSize: 13, letterSpacing: '.04em',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            cursor: canSubmit ? 'pointer' : 'not-allowed',
+            cursor: loading ? 'default' : 'pointer',
+            opacity: loading ? 0.75 : 1,
           }}
         >
           <span>
             {loading
-              ? 'กำลังสร้างออเดอร์…'
+              ? L.orderLoading
               : !shopInfo.isOpen
-                ? 'ร้านปิดอยู่'
+                ? L.shopClosedLabel
                 : payment === 'promptpay'
-                  ? 'ชำระเงิน'
-                  : 'ยืนยันออเดอร์'}
+                  ? L.payBtnQR(total)
+                  : L.payBtnCash(total)}
           </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span className="thb" style={{ fontFamily: 'var(--mono)', fontSize: 16 }}>{total}</span>
-            {I.arrow(14)}
-          </span>
+          {!loading && <span>{I.arrow(14)}</span>}
         </button>
       </div>
     </div>

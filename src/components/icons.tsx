@@ -40,4 +40,7 @@ export const I = {
   bowlMd:  (s=16) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 12c0-2.2 1.8-4 4-4s4 1.8 4 4"/><path d="M4 12h16"/><path d="M5 12a7 7 0 0 0 14 0"/></svg>,
   /* rice bowl — large portion (wider + taller rice dome, ~1.3× more rice) */
   bowlLg:  (s=16) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 12c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M4 12h16"/><path d="M5 12a7 7 0 0 0 14 0"/></svg>,
+  download:(s=18) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v13M7 11l5 5 5-5"/><path d="M3 19h18"/></svg>,
+  chevron: (s=16, dir: 'up'|'down'='down') => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={dir==='up'?{transform:'rotate(180deg)'}:undefined}><path d="M6 9l6 6 6-6"/></svg>,
+  smartphone:(s=18) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>,
 };

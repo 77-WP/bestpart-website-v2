@@ -11,6 +11,7 @@ import { TEST_MODE } from '../config/env';
 import { ProductSheet } from '../components/menu/ProductSheet';
 import { FEATURED_KEYWORD } from '../config/featured';
 import { useT } from '../i18n';
+import { useMenuState } from '../lib/menuState';
 
 /* ── Types ───────────────────────────────────────────────── */
 type Category = {
@@ -50,6 +51,20 @@ function splitParens(name: string): { main: string; note: string | null } {
   return m ? { main: m[1].trim(), note: m[2] } : { main: name, note: null };
 }
 
+/**
+ * If restore_at is the same calendar day as serverTime (Asia/Bangkok, UTC+7),
+ * returns "HH:MM" in BKK time; otherwise returns null.
+ */
+function backAtTime(restoreAt: string | null, serverTime: string | null): string | null {
+  if (!restoreAt || !serverTime) return null;
+  const BKK = 7 * 3_600_000;
+  const rMs = new Date(restoreAt).getTime();
+  const sMs = new Date(serverTime).getTime();
+  if (new Date(rMs + BKK).toISOString().slice(0, 10) !== new Date(sMs + BKK).toISOString().slice(0, 10)) return null;
+  const r = new Date(rMs + BKK);
+  return `${String(r.getUTCHours()).padStart(2, '0')}:${String(r.getUTCMinutes()).padStart(2, '0')}`;
+}
+
 /** Pick hero item for a category — keyword match → best_seller → first */
 function pickHero(catNameTh: string, items: MenuItem[]): MenuItem {
   const keyword = FEATURED_KEYWORD[catNameTh];
@@ -74,6 +89,8 @@ export default function Order() {
   const [searchParams, setSearchParams] = useSearchParams();
   const prefersReduced = useReducedMotion();
   const { t, lang } = useT();
+
+  const menuSt = useMenuState();
 
   const method = searchParams.get('method') ?? 'dine-in';
   const itemId = searchParams.get('item');
@@ -467,8 +484,10 @@ export default function Order() {
               const hasHero   = catItems.length >= 3;
               const heroItem  = hasHero ? pickHero(cat.name_th, catItems) : null;
               const gridItems = hasHero ? catItems.filter(it => it.id !== heroItem!.id) : catItems;
-              const heroMain  = heroItem ? splitParens(heroItem.name_th).main : '';
-              const heroNote  = heroItem ? splitParens(heroItem.name_th).note : null;
+              const heroMain    = heroItem ? splitParens(heroItem.name_th).main : '';
+              const heroNote   = heroItem ? splitParens(heroItem.name_th).note : null;
+              const heroUnavail  = heroItem ? menuSt.isItemUnavailable(heroItem.id) : false;
+              const heroBackTime = heroItem ? backAtTime(menuSt.itemRestoreAt(heroItem.id), menuSt.getServerTime()) : null;
 
               return (
                 <div key={cat.id}>
@@ -500,10 +519,10 @@ export default function Order() {
                     {heroItem && (
                       <motion.div
                         initial={prefersReduced ? false : { opacity: 0, y: 14 }}
-                        animate={{ opacity: 1, y: 0 }}
+                        animate={{ opacity: heroUnavail ? 0.45 : 1, y: 0 }}
                         transition={{ delay: catDelay, duration: 0.24, ease: 'easeOut' }}
-                        whileTap={prefersReduced ? undefined : { scale: 0.98 }}
-                        onClick={() => openItem(heroItem.id)}
+                        whileTap={prefersReduced || heroUnavail ? undefined : { scale: 0.98 }}
+                        onClick={heroUnavail ? undefined : () => openItem(heroItem.id)}
                         style={{
                           marginBottom: 8,
                           borderRadius: 18,
@@ -513,7 +532,7 @@ export default function Order() {
                           display: 'flex', alignItems: 'stretch',
                           minHeight: 210,
                           overflow: 'hidden',
-                          cursor: 'pointer',
+                          cursor: heroUnavail ? 'default' : 'pointer',
                         }}
                       >
                         {/* Left: image on warm glow — ~57% of card width */}
@@ -554,14 +573,19 @@ export default function Order() {
                           padding: '16px 14px 14px 12px',
                           display: 'flex', flexDirection: 'column',
                         }}>
-                          {/* แนะนำ badge */}
+                          {/* Badge: unavailable or แนะนำ */}
                           <span style={{
-                            alignSelf: 'flex-start', marginBottom: 8,
+                            alignSelf: 'flex-start', marginBottom: 4,
                             fontSize: 9, fontWeight: 700, letterSpacing: '.04em',
                             padding: '2px 8px', borderRadius: 'var(--r-pill)',
-                            background: 'rgba(184,134,46,0.14)',
-                            color: 'var(--gold)',
-                          }}>{t('menu.badge.best')}</span>
+                            background: heroUnavail ? 'rgba(43,33,24,0.10)' : 'rgba(184,134,46,0.14)',
+                            color: heroUnavail ? 'var(--ink-3)' : 'var(--gold)',
+                          }}>{heroUnavail ? t('menu.unavailable') : t('menu.badge.best')}</span>
+                          {heroUnavail && heroBackTime && (
+                            <div style={{ fontSize: 9, color: 'var(--ink-3)', marginBottom: 4 }}>
+                              {t('menu.backAt', heroBackTime)}
+                            </div>
+                          )}
 
                           <div style={{
                             fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 500,
@@ -584,14 +608,16 @@ export default function Order() {
                               {heroItem.base_price}
                             </span>
                             <motion.button
-                              whileTap={prefersReduced ? undefined : { scale: 0.88 }}
-                              onClick={e => { e.stopPropagation(); openItem(heroItem.id); }}
+                              whileTap={prefersReduced || heroUnavail ? undefined : { scale: 0.88 }}
+                              onClick={e => { e.stopPropagation(); if (!heroUnavail) openItem(heroItem.id); }}
+                              disabled={heroUnavail}
+                              aria-disabled={heroUnavail}
                               style={{
                                 width: 38, height: 38, borderRadius: '50%',
-                                background: shopInfo.isOpen ? 'var(--ink)' : 'var(--bg-3)',
-                                color: shopInfo.isOpen ? 'var(--on-accent)' : 'var(--ink-3)',
+                                background: (heroUnavail || !shopInfo.isOpen) ? 'var(--bg-3)' : 'var(--ink)',
+                                color: (heroUnavail || !shopInfo.isOpen) ? 'var(--ink-3)' : 'var(--on-accent)',
                                 border: 0, display: 'grid', placeItems: 'center',
-                                cursor: 'pointer', flexShrink: 0,
+                                cursor: heroUnavail ? 'default' : 'pointer', flexShrink: 0,
                               }}
                             >{I.plus(17)}</motion.button>
                           </div>
@@ -603,16 +629,18 @@ export default function Order() {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                       {gridItems.map((it, gridIdx) => {
                         const { main, note } = splitParens(it.name_th);
-                        const delay = Math.min(catDelay + (hasHero ? 0.08 : 0) + Math.floor(gridIdx / 2) * 0.06, 0.42);
+                        const delay    = Math.min(catDelay + (hasHero ? 0.08 : 0) + Math.floor(gridIdx / 2) * 0.06, 0.42);
+                        const itUnavail  = menuSt.isItemUnavailable(it.id);
+                        const itBackTime = backAtTime(menuSt.itemRestoreAt(it.id), menuSt.getServerTime());
 
                         return (
                           <motion.div
                             key={it.id}
                             initial={prefersReduced ? false : { opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
+                            animate={{ opacity: itUnavail ? 0.45 : 1, y: 0 }}
                             transition={{ delay, duration: 0.22, ease: 'easeOut' }}
-                            whileTap={prefersReduced ? undefined : { scale: 0.96 }}
-                            onClick={() => openItem(it.id)}
+                            whileTap={prefersReduced || itUnavail ? undefined : { scale: 0.96 }}
+                            onClick={itUnavail ? undefined : () => openItem(it.id)}
                             style={{
                               borderRadius: 14,
                               background: CARD_BG,
@@ -620,7 +648,7 @@ export default function Order() {
                               boxShadow: CARD_SHADOW,
                               display: 'flex', flexDirection: 'column',
                               overflow: 'hidden',
-                              cursor: 'pointer',
+                              cursor: itUnavail ? 'default' : 'pointer',
                             }}
                           >
                             {/* Image on glow — 25% smaller area */}
@@ -629,13 +657,32 @@ export default function Order() {
                               width: '100%', aspectRatio: '1',
                               background: GLOW_BG,
                             }}>
-                              {it.is_best_seller && (
+                              {it.is_best_seller && !itUnavail && (
                                 <span style={{
                                   position: 'absolute', top: 5, left: 5, zIndex: 2,
                                   fontSize: 7, fontWeight: 700, letterSpacing: '.05em',
                                   padding: '1px 4px', borderRadius: 3,
                                   background: 'var(--accent)', color: '#fff',
                                 }}>BEST</span>
+                              )}
+                              {itUnavail && (
+                                <div style={{
+                                  position: 'absolute', top: 5, left: 5, zIndex: 2,
+                                  display: 'flex', flexDirection: 'column', gap: 2,
+                                }}>
+                                  <span style={{
+                                    fontSize: 7, fontWeight: 700, letterSpacing: '.03em',
+                                    padding: '2px 5px', borderRadius: 3,
+                                    background: 'rgba(43,33,24,0.62)', color: 'rgba(255,255,255,0.88)',
+                                  }}>{t('menu.unavailable')}</span>
+                                  {itBackTime && (
+                                    <span style={{
+                                      fontSize: 7, fontWeight: 600,
+                                      padding: '2px 5px', borderRadius: 3,
+                                      background: 'rgba(43,33,24,0.45)', color: 'rgba(255,255,255,0.80)',
+                                    }}>{t('menu.backAt', itBackTime)}</span>
+                                  )}
+                                </div>
                               )}
                               {it.image_url ? (
                                 <img
@@ -690,14 +737,16 @@ export default function Order() {
                                   {it.base_price}
                                 </span>
                                 <motion.button
-                                  whileTap={prefersReduced ? undefined : { scale: 0.88 }}
-                                  onClick={e => { e.stopPropagation(); openItem(it.id); }}
+                                  whileTap={prefersReduced || itUnavail ? undefined : { scale: 0.88 }}
+                                  onClick={e => { e.stopPropagation(); if (!itUnavail) openItem(it.id); }}
+                                  disabled={itUnavail}
+                                  aria-disabled={itUnavail}
                                   style={{
                                     width: 24, height: 24, borderRadius: '50%',
-                                    background: shopInfo.isOpen ? 'var(--ink)' : 'var(--bg-3)',
-                                    color: shopInfo.isOpen ? 'var(--on-accent)' : 'var(--ink-3)',
+                                    background: (itUnavail || !shopInfo.isOpen) ? 'var(--bg-3)' : 'var(--ink)',
+                                    color: (itUnavail || !shopInfo.isOpen) ? 'var(--ink-3)' : 'var(--on-accent)',
                                     border: 0, display: 'grid', placeItems: 'center',
-                                    cursor: 'pointer', flexShrink: 0,
+                                    cursor: itUnavail ? 'default' : 'pointer', flexShrink: 0,
                                   }}
                                 >{I.plus(11)}</motion.button>
                               </div>

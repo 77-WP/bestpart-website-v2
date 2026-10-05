@@ -225,6 +225,11 @@ export const TH = {
   'track.backHome':          'กลับหน้าแรก',
   'track.noItems':           'ไม่มีข้อมูลรายการ',
 
+  // ── Menu availability ─────────────────────────────────────
+  'menu.unavailable':       'หมดชั่วคราว',
+  'menu.backAt':            (time: string) => `กลับมา ${time}`,
+  'menu.optionUnavailable': 'หมด',
+
   // ── Menu badge ────────────────────────────────────────────
   'menu.badge.best':         'แนะนำ',
 

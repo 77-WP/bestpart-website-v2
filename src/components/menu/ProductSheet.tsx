@@ -8,6 +8,7 @@ import { useCart, type CartItem } from '../../store/cart';
 import { useT } from '../../i18n';
 import { PERSONALIZATION } from '../../config/personalization';
 import { TEST_MODE } from '../../config/env';
+import { useMenuState } from '../../lib/menuState';
 
 /* ── DB types ─────────────────────────────────────────────── */
 type MenuItemRow = {
@@ -72,6 +73,8 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
   const { add, replace, items } = useCart();
   const { t, lang }    = useT();
   const prefersReduced = useReducedMotion();
+
+  const { isItemUnavailable: isItemUnavailState, isOptionUnavailable, tick: menuTick } = useMenuState();
 
   const itemId    = searchParams.get('item');
   const editCartId = searchParams.get('editCartId');
@@ -356,8 +359,38 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
 
   const canOrder = item !== null && (item.is_active || (TEST_MODE && item.id === 'test-1baht'));
 
+  /* ── Server-state unavailability ────────────────────────── */
+  const isCurrentlyUnavailable = phase === 'ready' && item
+    ? (
+        isItemUnavailState(item.id) ||
+        step1Groups.some(g =>
+          g.selection_type === 'SINGLE_SELECT' &&
+          g.options.every(o => isOptionUnavailable(o.id))
+        )
+      )
+    : false;
+
+  /* Auto-fix: if a SINGLE_SELECT selection becomes unavailable, pick first available */
+  useEffect(() => {
+    if (phase !== 'ready') return;
+    setSelections(prev => {
+      const next = { ...prev };
+      let changed = false;
+      for (const g of groups) {
+        if (isHiddenGroup(g) || g.selection_type !== 'SINGLE_SELECT') continue;
+        const cur = prev[g.id] ?? [];
+        if (cur.length === 0 || !isOptionUnavailable(cur[0])) continue;
+        const firstAvail = g.options.find(o => !isOptionUnavailable(o.id));
+        next[g.id] = firstAvail ? [firstAvail.id] : [];
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuTick, phase]);
+
   function handleAdd() {
-    if (!canOrder) return;
+    if (!canOrder || isCurrentlyUnavailable) return;
     if (!isShopOpen) {
       setClosedTapMsg(true);
       setTimeout(() => setClosedTapMsg(false), 3000);
@@ -601,9 +634,10 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                           {isSpice ? (
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
                               {displayOpts.map(opt => {
-                                const sel = selectedIds.includes(opt.id);
-                                const idx = spiceIndex(opt.option_name_th);
-                                const label = lang === 'en'
+                                const sel    = selectedIds.includes(opt.id);
+                                const optOut = isOptionUnavailable(opt.id);
+                                const idx    = spiceIndex(opt.option_name_th);
+                                const label  = lang === 'en'
                                   ? (idx >= 0 ? SPICE_EN[idx] : cleanLabel(opt.option_name_en || opt.option_name_th))
                                   : (idx >= 0 ? SPICE_TH[idx] : cleanLabel(opt.option_name_th));
                                 const chiliCount = idx >= 0 ? idx : 0;
@@ -611,8 +645,9 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                                 return (
                                   <motion.button
                                     key={opt.id}
-                                    whileTap={prefersReduced ? undefined : { scale: 0.93 }}
-                                    onClick={() => handleSelect(g.id, opt.id, 'SINGLE_SELECT')}
+                                    whileTap={prefersReduced || optOut ? undefined : { scale: 0.93 }}
+                                    onClick={optOut ? undefined : () => handleSelect(g.id, opt.id, 'SINGLE_SELECT')}
+                                    aria-disabled={optOut}
                                     style={{
                                       display: 'flex', flexDirection: 'column',
                                       alignItems: 'center', justifyContent: 'center',
@@ -622,6 +657,8 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                                       background: sel ? 'rgba(181,81,30,0.07)' : 'var(--bg)',
                                       color: sel ? 'var(--accent)' : 'var(--ink-3)',
                                       gap: 4,
+                                      opacity: optOut ? 0.35 : 1,
+                                      cursor: optOut ? 'default' : undefined,
                                     }}
                                   >
                                     <div style={{
@@ -636,7 +673,7 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                                       }
                                     </div>
                                     <span style={{ fontSize: 10, lineHeight: 1.2, textAlign: 'center' }}>
-                                      {label}
+                                      {optOut ? t('menu.optionUnavailable') : label}
                                     </span>
                                   </motion.button>
                                 );
@@ -646,16 +683,18 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                             /* Size / other mandatory single: pill row */
                             <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
                               {displayOpts.map(opt => {
-                                const sel = selectedIds.includes(opt.id);
-                                const label = lang === 'en'
+                                const sel    = selectedIds.includes(opt.id);
+                                const optOut = isOptionUnavailable(opt.id);
+                                const label  = lang === 'en'
                                   ? (cleanLabel(opt.option_name_en) || cleanLabel(opt.option_name_th))
                                   : cleanLabel(opt.option_name_th);
                                 const isLarge = isSize && opt.price_adjustment > 0;
                                 return (
                                   <motion.button
                                     key={opt.id}
-                                    whileTap={prefersReduced ? undefined : { scale: 0.94 }}
-                                    onClick={() => handleSelect(g.id, opt.id, 'SINGLE_SELECT')}
+                                    whileTap={prefersReduced || optOut ? undefined : { scale: 0.94 }}
+                                    onClick={optOut ? undefined : () => handleSelect(g.id, opt.id, 'SINGLE_SELECT')}
+                                    aria-disabled={optOut}
                                     style={{
                                       padding: '9px 14px', borderRadius: 'var(--r-pill)',
                                       border: sel ? '1.5px solid var(--ink)' : '1px solid var(--line)',
@@ -664,6 +703,8 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                                       fontSize: 13, fontFamily: 'var(--serif)',
                                       display: 'inline-flex', alignItems: 'center', gap: 5,
                                       minHeight: 44,
+                                      opacity: optOut ? 0.35 : 1,
+                                      cursor: optOut ? 'default' : undefined,
                                     }}
                                   >
                                     {isSize && (
@@ -671,11 +712,14 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                                         {isLarge ? I.bowlLg(16) : I.bowlMd(13)}
                                       </span>
                                     )}
-                                    {sel && <span style={{ color: 'var(--accent)', fontSize: 10 }}>{I.check(10)}</span>}
+                                    {sel && !optOut && <span style={{ color: 'var(--accent)', fontSize: 10 }}>{I.check(10)}</span>}
                                     <span>{label}</span>
-                                    {opt.price_adjustment > 0 && (
-                                      <span style={{ fontSize: 11, fontWeight: 600, opacity: 0.7 }}>+฿{opt.price_adjustment}</span>
-                                    )}
+                                    {optOut
+                                      ? <span style={{ fontSize: 11, opacity: 0.8 }}>{t('menu.optionUnavailable')}</span>
+                                      : opt.price_adjustment > 0 && (
+                                          <span style={{ fontSize: 11, fontWeight: 600, opacity: 0.7 }}>+฿{opt.price_adjustment}</span>
+                                        )
+                                    }
                                   </motion.button>
                                 );
                               })}
@@ -737,16 +781,18 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                         marginBottom: eggAdditive.length > 0 ? 8 : 0,
                       }}>
                         {eggDoneness.map(opt => {
-                          const sel   = isSelected(opt.groupId, opt.id);
-                          const po    = PERSONALIZATION[opt.option_name_th.trim()];
-                          const label = lang === 'en'
+                          const sel    = isSelected(opt.groupId, opt.id);
+                          const optOut = isOptionUnavailable(opt.id);
+                          const po     = PERSONALIZATION[opt.option_name_th.trim()];
+                          const label  = lang === 'en'
                             ? (po?.labelEn ?? cleanLabel(opt.option_name_en || opt.option_name_th))
                             : (po?.labelTh ?? cleanLabel(opt.option_name_th));
                           return (
                             <motion.button
                               key={opt.id}
-                              whileTap={prefersReduced ? undefined : { scale: 0.94 }}
-                              onClick={() => handleEggDoneness(opt)}
+                              whileTap={prefersReduced || optOut ? undefined : { scale: 0.94 }}
+                              onClick={optOut ? undefined : () => handleEggDoneness(opt)}
+                              aria-disabled={optOut}
                               style={{
                                 minHeight: 38, padding: '7px 12px', borderRadius: 'var(--r-pill)',
                                 border: sel ? '1.5px solid var(--accent)' : '1px solid var(--line)',
@@ -754,9 +800,11 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                                 color: sel ? 'var(--accent)' : 'var(--ink-2)',
                                 fontSize: 13, fontFamily: 'var(--serif)',
                                 display: 'inline-flex', alignItems: 'center', gap: 5,
+                                opacity: optOut ? 0.35 : 1,
+                                cursor: optOut ? 'default' : undefined,
                               }}
                             >
-                              {sel && (
+                              {sel && !optOut && (
                                 <motion.span
                                   initial={prefersReduced ? false : { scale: 0, opacity: 0 }}
                                   animate={{ scale: 1, opacity: 1 }}
@@ -764,6 +812,7 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                                 >{I.check(10)}</motion.span>
                               )}
                               {label}
+                              {optOut && <span style={{ fontSize: 10, opacity: 0.8 }}>{t('menu.optionUnavailable')}</span>}
                             </motion.button>
                           );
                         })}
@@ -774,16 +823,18 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                     {eggAdditive.length > 0 && (
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         {eggAdditive.map(opt => {
-                          const sel   = isSelected(opt.groupId, opt.id);
-                          const po    = PERSONALIZATION[opt.option_name_th.trim()];
-                          const label = lang === 'en'
+                          const sel    = isSelected(opt.groupId, opt.id);
+                          const optOut = isOptionUnavailable(opt.id);
+                          const po     = PERSONALIZATION[opt.option_name_th.trim()];
+                          const label  = lang === 'en'
                             ? (po?.labelEn ?? cleanLabel(opt.option_name_en || opt.option_name_th))
                             : (po?.labelTh ?? cleanLabel(opt.option_name_th));
                           return (
                             <motion.button
                               key={opt.id}
-                              whileTap={prefersReduced ? undefined : { scale: 0.94 }}
-                              onClick={() => handleSelect(opt.groupId, opt.id, 'MULTI_SELECT')}
+                              whileTap={prefersReduced || optOut ? undefined : { scale: 0.94 }}
+                              onClick={optOut ? undefined : () => handleSelect(opt.groupId, opt.id, 'MULTI_SELECT')}
+                              aria-disabled={optOut}
                               style={{
                                 minHeight: 38, padding: '7px 12px', borderRadius: 'var(--r-pill)',
                                 border: sel ? '1.5px solid var(--accent)' : '1px solid var(--line)',
@@ -791,9 +842,11 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                                 color: sel ? 'var(--accent)' : 'var(--ink-2)',
                                 fontSize: 13, fontFamily: 'var(--serif)',
                                 display: 'inline-flex', alignItems: 'center', gap: 5,
+                                opacity: optOut ? 0.35 : 1,
+                                cursor: optOut ? 'default' : undefined,
                               }}
                             >
-                              {sel && (
+                              {sel && !optOut && (
                                 <motion.span
                                   initial={prefersReduced ? false : { scale: 0, opacity: 0 }}
                                   animate={{ scale: 1, opacity: 1 }}
@@ -801,6 +854,7 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                                 >{I.check(10)}</motion.span>
                               )}
                               {label}
+                              {optOut && <span style={{ fontSize: 10, opacity: 0.8 }}>{t('menu.optionUnavailable')}</span>}
                             </motion.button>
                           );
                         })}
@@ -820,16 +874,18 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       {tasteOptions.map(opt => {
-                        const sel   = isSelected(opt.groupId, opt.id);
-                        const po    = PERSONALIZATION[opt.option_name_th.trim()];
-                        const label = lang === 'en'
+                        const sel    = isSelected(opt.groupId, opt.id);
+                        const optOut = isOptionUnavailable(opt.id);
+                        const po     = PERSONALIZATION[opt.option_name_th.trim()];
+                        const label  = lang === 'en'
                           ? (po?.labelEn ?? cleanLabel(opt.option_name_en || opt.option_name_th))
                           : (po?.labelTh ?? cleanLabel(opt.option_name_th));
                         return (
                           <motion.button
                             key={opt.id}
-                            whileTap={prefersReduced ? undefined : { scale: 0.94 }}
-                            onClick={() => handleSelect(opt.groupId, opt.id, 'MULTI_SELECT')}
+                            whileTap={prefersReduced || optOut ? undefined : { scale: 0.94 }}
+                            onClick={optOut ? undefined : () => handleSelect(opt.groupId, opt.id, 'MULTI_SELECT')}
+                            aria-disabled={optOut}
                             style={{
                               minHeight: 38, padding: '7px 12px', borderRadius: 'var(--r-pill)',
                               border: sel ? '1.5px solid var(--accent)' : '1px solid var(--line)',
@@ -837,9 +893,11 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                               color: sel ? 'var(--accent)' : 'var(--ink-2)',
                               fontSize: 13, fontFamily: 'var(--serif)',
                               display: 'inline-flex', alignItems: 'center', gap: 5,
+                              opacity: optOut ? 0.35 : 1,
+                              cursor: optOut ? 'default' : undefined,
                             }}
                           >
-                            {sel && (
+                            {sel && !optOut && (
                               <motion.span
                                 initial={prefersReduced ? false : { scale: 0, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
@@ -847,6 +905,7 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                               >{I.check(10)}</motion.span>
                             )}
                             {label}
+                            {optOut && <span style={{ fontSize: 10, opacity: 0.8 }}>{t('menu.optionUnavailable')}</span>}
                           </motion.button>
                         );
                       })}
@@ -865,15 +924,17 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                     <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
                       {extrasGroups.flatMap(g =>
                         g.options.map(opt => {
-                          const sel   = (selections[g.id] ?? []).includes(opt.id);
-                          const label = lang === 'en'
+                          const sel    = (selections[g.id] ?? []).includes(opt.id);
+                          const optOut = isOptionUnavailable(opt.id);
+                          const label  = lang === 'en'
                             ? (cleanLabel(opt.option_name_en) || cleanLabel(opt.option_name_th))
                             : cleanLabel(opt.option_name_th);
                           return (
                             <motion.button
                               key={opt.id}
-                              whileTap={prefersReduced ? undefined : { scale: 0.94 }}
-                              onClick={() => handleSelect(g.id, opt.id, g.selection_type)}
+                              whileTap={prefersReduced || optOut ? undefined : { scale: 0.94 }}
+                              onClick={optOut ? undefined : () => handleSelect(g.id, opt.id, g.selection_type)}
+                              aria-disabled={optOut}
                               style={{
                                 minHeight: 40, padding: '8px 12px', borderRadius: 'var(--r-pill)',
                                 border: sel ? '1.5px solid var(--ink-2)' : '1px solid var(--line)',
@@ -881,15 +942,20 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                                 color: sel ? 'var(--ink-2)' : 'var(--ink-3)',
                                 fontSize: 12, fontFamily: 'var(--serif)',
                                 display: 'inline-flex', alignItems: 'center', gap: 5,
+                                opacity: optOut ? 0.35 : 1,
+                                cursor: optOut ? 'default' : undefined,
                               }}
                             >
-                              {sel && <span style={{ fontSize: 10 }}>{I.check(10)}</span>}
+                              {sel && !optOut && <span style={{ fontSize: 10 }}>{I.check(10)}</span>}
                               {label}
-                              {opt.price_adjustment > 0 && (
-                                <span style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 600 }}>
-                                  +฿{opt.price_adjustment}
-                                </span>
-                              )}
+                              {optOut
+                                ? <span style={{ fontSize: 10, opacity: 0.8 }}>{t('menu.optionUnavailable')}</span>
+                                : opt.price_adjustment > 0 && (
+                                    <span style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 600 }}>
+                                      +฿{opt.price_adjustment}
+                                    </span>
+                                  )
+                              }
                             </motion.button>
                           );
                         })
@@ -1002,16 +1068,18 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                   </div>
 
                   <motion.button
-                    whileTap={prefersReduced ? undefined : { scale: 0.97 }}
-                    onClick={handleAdd}
+                    whileTap={prefersReduced || isCurrentlyUnavailable ? undefined : { scale: 0.97 }}
+                    onClick={isCurrentlyUnavailable ? undefined : handleAdd}
+                    aria-disabled={isCurrentlyUnavailable}
                     style={{
                       flex: 1, height: 50, borderRadius: 'var(--r-pill)',
-                      background: isShopOpen ? 'var(--accent)' : 'var(--bg-3)',
-                      color: isShopOpen ? '#fff' : 'var(--ink-3)',
-                      border: isShopOpen ? 'none' : '1px solid var(--line)',
+                      background: (isShopOpen && !isCurrentlyUnavailable) ? 'var(--accent)' : 'var(--bg-3)',
+                      color: (isShopOpen && !isCurrentlyUnavailable) ? '#fff' : 'var(--ink-3)',
+                      border: (isShopOpen && !isCurrentlyUnavailable) ? 'none' : '1px solid var(--line)',
                       fontSize: 13, fontWeight: 600,
+                      cursor: isCurrentlyUnavailable ? 'default' : undefined,
                     }}
-                  >{t('detail.addToCart', total)}</motion.button>
+                  >{isCurrentlyUnavailable ? t('menu.unavailable') : t('detail.addToCart', total)}</motion.button>
                 </div>
 
                 {/* Closed tap message */}

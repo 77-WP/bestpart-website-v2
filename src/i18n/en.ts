@@ -222,6 +222,11 @@ export const EN: Dict = {
   'track.backHome':          'Back to home',
   'track.noItems':           'No items',
 
+  // ── Menu availability ─────────────────────────────────────
+  'menu.unavailable':       'Unavailable',
+  'menu.backAt':            (time: string) => `Back at ${time}`,
+  'menu.optionUnavailable': 'Out',
+
   // ── Menu badge ────────────────────────────────────────────
   'menu.badge.best':         'Best',
 

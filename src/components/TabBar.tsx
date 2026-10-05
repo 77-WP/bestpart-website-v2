@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase, normalizeOrderStatus } from '../lib/supabase';
+import { supabase, normalizeOrderStatus, readFnError } from '../lib/supabase';
 import { getLocalOrderIds } from '../lib/localOrders';
 import { I } from './icons';
 import { useT } from '../i18n';
@@ -19,8 +19,11 @@ function useHasActiveOrders(override?: boolean): boolean {
     Promise.allSettled(
       ids.slice(0, 10).map(id =>
         supabase.functions.invoke('get-order', { body: { order_id: id } })
-          .then(({ data, error }) => {
-            if (error || !data) return false;
+          .then(async ({ data, error }) => {
+            if (error || !data) {
+              if (error) await readFnError(error); // fail silently
+              return false;
+            }
             return ACTIVE_STATUSES.includes(normalizeOrderStatus((data as { status: string }).status));
           })
       )

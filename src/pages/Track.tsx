@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase, type GetOrderResult, type GetOrderItem, normalizeOrderStatus } from '../lib/supabase';
+import { supabase, type GetOrderResult, type GetOrderItem, normalizeOrderStatus, readFnError } from '../lib/supabase';
 import { TabBar } from '../components/TabBar';
 import { I } from '../components/icons';
 import { SHOP } from '../config/shop';
@@ -114,7 +114,13 @@ export default function Track() {
       });
       if (stopped) return;
       if (error || !data) {
-        if (loading) { setLoading(false); setNotFound(true); }
+        const { code } = error ? await readFnError(error) : { code: 'fallback' };
+        if (code === 'not_found') {
+          setNotFound(true);
+          stopped = true;
+          if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+        }
+        if (loading) setLoading(false);
         return;
       }
       const raw = data as GetOrderResult;

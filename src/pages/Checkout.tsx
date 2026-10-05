@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart, cartTotal, itemTotal } from '../store/cart';
 import { useT } from '../i18n';
-import { supabase } from '../lib/supabase';
+import { supabase, readFnError } from '../lib/supabase';
 import { I } from '../components/icons';
 import { SHOP, shopCloseLabel, computeShopStatus, roundUp5, minToHHMM, type ShopStatus } from '../config/shop';
 import { TEST_MODE, ENABLE_BEAM, CURBSIDE_PROMPTPAY_ONLY } from '../config/env';
@@ -319,19 +319,7 @@ export default function Checkout() {
     const result = data as { order_id?: string } | null;
 
     if (fnError || !result?.order_id) {
-      let code = 'fallback';
-      if (fnError) {
-        try {
-          const ctx = (fnError as unknown as { context?: unknown }).context;
-          const parsed: unknown = typeof ctx === 'string'
-            ? JSON.parse(ctx)
-            : typeof (ctx as { body?: string })?.body === 'string'
-              ? JSON.parse((ctx as { body: string }).body)
-              : ctx;
-          const errCode = (parsed as { error?: string })?.error;
-          if (errCode) code = errCode;
-        } catch { /* ignore parse error */ }
-      }
+      const { code } = fnError ? await readFnError(fnError) : { code: 'fallback' };
       if (TEST_MODE) console.error('[create-order] failed, code:', code, fnError);
       setLoading(false);
       const errorMsg = (() => {

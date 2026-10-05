@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { supabase, readFnError } from '../lib/supabase';
 import { useT } from '../i18n';
 import type { GetOrderResult } from '../lib/supabase';
 import { I } from '../components/icons';
@@ -127,8 +127,12 @@ export default function Pay() {
 
     async function poll() {
       if (stopped) return;
-      const { data } = await supabase.functions.invoke('get-order', { body: { order_id: orderId } });
-      if (stopped || !data) return;
+      const { data, error } = await supabase.functions.invoke('get-order', { body: { order_id: orderId } });
+      if (stopped) return;
+      if (error || !data) {
+        if (error) await readFnError(error); // fail silently
+        return;
+      }
       const row = data as GetOrderResult;
       if (row.call_name) setCallName(prev => prev ?? row.call_name);
       if (row.payment_status === 'paid') handlePaid();

@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase, type GetOrderResult, type GetOrderItem, normalizeOrderStatus } from '../lib/supabase';
+import { supabase, type GetOrderResult, type GetOrderItem, normalizeOrderStatus, readFnError } from '../lib/supabase';
 import { TabBar } from '../components/TabBar';
 import { I } from '../components/icons';
 import { getLocalOrders, pruneOldOrders } from '../lib/localOrders';
@@ -54,8 +54,11 @@ async function fetchOrders(ids: string[]): Promise<LocalOrderData[]> {
   const results = await Promise.allSettled(
     ids.slice(0, 10).map(id =>
       supabase.functions.invoke('get-order', { body: { order_id: id } })
-        .then(({ data, error }) => {
-          if (error || !data) return null;
+        .then(async ({ data, error }) => {
+          if (error || !data) {
+            if (error) await readFnError(error); // parse silently
+            return null;
+          }
           const raw = data as GetOrderResult;
           const normalized = normalizeOrderStatus(raw.status);
           return {
@@ -107,6 +110,9 @@ export default function Orders() {
   const ids         = localOrders.map(o => o.id);
 
   const [orders,  setOrders]  = useState<LocalOrderData[]>([]);
+  const ordersRef = useRef<LocalOrderData[]>([]);
+  // Keep ref in sync so the poll closure can read current state without stale closure
+  useEffect(() => { ordersRef.current = orders; }, [orders]);
   const [loading, setLoading] = useState(ids.length > 0);
 
   /* ── Initial load ─────────────────────────────────────── */
@@ -126,13 +132,56 @@ export default function Orders() {
     return () => { cancelled = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ── Poll every 10 s ──────────────────────────────────── */
+  /* ── Poll every 10 s (with visibilitychange support) ─── */
   useEffect(() => {
     if (ids.length === 0) return;
-    const timer = setInterval(() => {
-      fetchOrders(ids).then(rows => setOrders(rows)).catch(() => {});
-    }, 10_000);
-    return () => clearInterval(timer);
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+    function getActiveIds() {
+      // Only poll orders that aren't already in a terminal state
+      return ids.filter(id => {
+        const cached = ordersRef.current.find(o => o.id === id);
+        if (!cached) return true;
+        const s = cached.status;
+        return s !== 'completed' && s !== 'cancelled';
+      });
+    }
+
+    function poll() {
+      const active = getActiveIds();
+      if (active.length === 0) return;
+      fetchOrders(active).then(rows => {
+        setOrders(prev => {
+          // Merge: update active, keep terminal ones as-is
+          const map = new Map(prev.map(o => [o.id, o]));
+          rows.forEach(r => map.set(r.id, r));
+          return Array.from(map.values());
+        });
+      }).catch(() => {});
+    }
+
+    function startInterval() {
+      if (pollInterval) return;
+      pollInterval = setInterval(poll, 10_000);
+    }
+    function stopInterval() {
+      if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+    }
+    function handleVisibility() {
+      if (document.visibilityState === 'hidden') {
+        stopInterval();
+      } else {
+        poll();
+        startInterval();
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    startInterval();
+    return () => {
+      stopInterval();
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Sort: in-progress first, then by time desc ──────── */

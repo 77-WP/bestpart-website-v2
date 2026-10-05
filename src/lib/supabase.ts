@@ -70,14 +70,31 @@ export type GetOrderResult = {
  */
 export function normalizeOrderStatus(raw: string): string {
   switch (raw) {
-    case 'payment_pending':  return 'awaiting_payment'
+    case 'payment_pending':        return 'awaiting_payment'
     case 'created':
     case 'accepted':
-    case 'queued':           return 'pending'
+    case 'queued':                 return 'pending'
     case 'cooking':
-    case 'assembly':         return 'preparing'
-    case 'picked_up':        return 'ready'
-    case 'expired':          return 'cancelled'
-    default:                 return raw   // pass-through: pending, preparing, ready, completed, cancelled, awaiting_payment
+    case 'assembly':               return 'preparing'
+    case 'picked_up':              return 'ready'
+    case 'expired':                return 'cancelled'
+    case 'refunded':
+    case 'partially_refunded':     return 'completed'
+    default:                       return raw   // pass-through: pending, preparing, ready, completed, cancelled, awaiting_payment
   }
+}
+
+/**
+ * Parse the error body from a supabase-js FunctionsHttpError.
+ * In supabase-js, error.context is a Response object — read it with clone().json().
+ */
+export async function readFnError(err: unknown): Promise<{ code: string; status: number | null }> {
+  try {
+    const context = (err as { context?: unknown }).context;
+    if (context instanceof Response) {
+      const json = await context.clone().json();
+      return { code: (json as { error?: string }).error ?? 'fallback', status: context.status };
+    }
+  } catch { /* ignore */ }
+  return { code: 'fallback', status: null };
 }

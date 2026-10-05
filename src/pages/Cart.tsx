@@ -8,6 +8,7 @@ import { I } from '../components/icons';
 import { ProductSheet } from '../components/menu/ProductSheet';
 import { useT } from '../i18n';
 import { supabase } from '../lib/supabase';
+import { useMenuState, getCartIssues, cartHasBlocking, isItemUnavailable } from '../lib/menuState';
 import { computeShopStatus } from '../config/shop';
 import { TEST_MODE } from '../config/env';
 
@@ -61,6 +62,10 @@ export default function Cart() {
   const method   = searchParams.get('method') ?? 'takeaway';
   const isDineIn = method === 'dine-in';
   const total    = cartTotal(items);
+
+  useMenuState(); // subscribe to availability polling (re-renders on each poll)
+  const issues  = getCartIssues(items);
+  const blocked = cartHasBlocking(items);
 
   /* ProductSheet: item param opens sheet (editCartId read by ProductSheet) */
   const itemId = searchParams.get('item');
@@ -197,7 +202,7 @@ export default function Cart() {
 
   /* ── FULL CART ───────────────────────────────────────────── */
   return (
-    <div className="page" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 116px)' }}>
+    <div className="page" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 140px)' }}>
 
       {/* Header */}
       <motion.div
@@ -223,11 +228,13 @@ export default function Cart() {
       {/* ── 1. Cart lines ────────────────────────────────────── */}
       <div style={{ padding: '4px 18px 0' }}>
         <AnimatePresence initial={false}>
-          {items.map((it, i) => (
+          {items.map((it, i) => {
+            const issue = issues.get(it.cartId);
+            return (
             <motion.div
               key={it.cartId}
               initial={prefersReduced ? false : { opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
+              animate={{ opacity: issue?.itemUnavailable ? 0.45 : 1, y: 0 }}
               exit={prefersReduced ? undefined : { opacity: 0, height: 0, overflow: 'hidden' }}
               transition={{ duration: 0.18 }}
               style={{
@@ -259,6 +266,12 @@ export default function Cart() {
                   {lang === 'en' ? it.name : it.nameEn}
                 </div>
 
+                {issue?.itemUnavailable && (
+                  <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4, lineHeight: 1.4 }}>
+                    {t('cart.itemUnavailable')}
+                  </div>
+                )}
+
                 <ItemSummary it={it} />
 
                 {/* Qty stepper + price */}
@@ -280,8 +293,8 @@ export default function Cart() {
                   <span className="price thb" style={{ fontSize: 16 }}>{itemTotal(it)}</span>
                 </div>
 
-                {/* Edit button — food items only */}
-                {!it.isDrink && (
+                {/* Edit button — food items only, hidden when item unavailable */}
+                {!it.isDrink && !issue?.itemUnavailable && (
                   <button
                     onClick={() => setSearchParams(prev => {
                       const next = new URLSearchParams(prev);
@@ -301,9 +314,17 @@ export default function Cart() {
                     {I.pencil(11)} {t('cart.editLabel')}
                   </button>
                 )}
+
+                {/* Option unavailable notice */}
+                {!issue?.itemUnavailable && (issue?.unavailableOptionIds.length ?? 0) > 0 && (
+                  <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4, lineHeight: 1.4 }}>
+                    {t('cart.optionUnavailable')}
+                  </div>
+                )}
               </div>
             </motion.div>
-          ))}
+            );
+          })}
         </AnimatePresence>
       </div>
 
@@ -358,6 +379,7 @@ export default function Cart() {
           }}>
             {drinks.map(drink => {
               const count = drinkQty(drink.id);
+              const drinkUnavail = isItemUnavailable(drink.id);
               return (
                 <div key={drink.id} style={{
                   flex: drinks.length <= 2 ? 1 : 'none',
@@ -369,6 +391,7 @@ export default function Cart() {
                   background: 'var(--bg-2)',
                   border: '1px solid var(--line)',
                   minHeight: 64,
+                  opacity: drinkUnavail ? 0.45 : 1,
                 }}>
                   {/* Image 44×44 */}
                   <div style={{
@@ -398,6 +421,11 @@ export default function Cart() {
                     <div style={{ fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--mono)', marginTop: 2 }}>
                       ฿{drink.base_price}
                     </div>
+                    {drinkUnavail && (
+                      <div style={{ fontSize: 9, color: 'var(--accent)', fontWeight: 600, letterSpacing: '.04em', marginTop: 2 }}>
+                        {t('menu.unavailable')}
+                      </div>
+                    )}
                   </div>
 
                   {/* + or − n + */}
@@ -410,13 +438,17 @@ export default function Cart() {
                       <span style={{ minWidth: 14, textAlign: 'center', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600 }}>{count}</span>
                       <motion.button
                         whileTap={prefersReduced ? undefined : { scale: 0.88 }}
-                        onClick={() => addDrink(drink)} style={roundBtn}
+                        onClick={!drinkUnavail ? () => addDrink(drink) : undefined}
+                        aria-disabled={drinkUnavail}
+                        style={{ ...roundBtn, ...(drinkUnavail ? { opacity: 0.4, cursor: 'default' } : {}) }}
                       >{I.plus(10)}</motion.button>
                     </div>
                   ) : (
                     <motion.button
                       whileTap={prefersReduced ? undefined : { scale: 0.88 }}
-                      onClick={() => addDrink(drink)} style={{ ...roundBtn, flexShrink: 0 }}
+                      onClick={!drinkUnavail ? () => addDrink(drink) : undefined}
+                      aria-disabled={drinkUnavail}
+                      style={{ ...roundBtn, flexShrink: 0, ...(drinkUnavail ? { opacity: 0.4, cursor: 'default' } : {}) }}
                     >{I.plus(13)}</motion.button>
                   )}
                 </div>
@@ -550,13 +582,22 @@ export default function Cart() {
         padding: `14px 18px calc(env(safe-area-inset-bottom, 0px) + 14px)`,
         background: 'var(--bg)', borderTop: '1px solid var(--line)', zIndex: 30,
       }}>
+        <div style={{
+          fontSize: 12, color: 'var(--accent)', marginBottom: 8, textAlign: 'center', lineHeight: 1.4,
+          visibility: blocked ? 'visible' : 'hidden',
+        }}>
+          {t('cart.blocked')}
+        </div>
         <button
-          onClick={() => navigate('/checkout')}
+          onClick={!blocked ? () => navigate('/checkout') : undefined}
+          aria-disabled={blocked}
           style={{
             width: '100%', background: 'var(--ink)', color: 'var(--on-accent)',
             border: 0, padding: '16px 18px', borderRadius: 'var(--r-pill)',
             fontWeight: 600, fontSize: 13, letterSpacing: '.04em',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            opacity: blocked ? 0.45 : 1,
+            cursor: blocked ? 'default' : 'pointer',
           }}
         >
           <span>{t('cart.continueBtn', total)}</span>

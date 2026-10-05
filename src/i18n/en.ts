@@ -95,6 +95,9 @@ export const EN: Dict = {
   'cart.kitchenNotePlaceholder': 'e.g. Less basil / less rice / mild spice',
   'cart.kitchenNoteHelper': "Anything the options above didn't cover? Tell us here.",
   'cart.kitchenNoteSmall':  'No need to repeat what you\'ve already selected above.',
+  'cart.itemUnavailable':   'This item is unavailable. Remove it to continue.',
+  'cart.optionUnavailable': 'Some options are unavailable. Tap edit to choose again.',
+  'cart.blocked':           'Some items are unavailable. Please update your bag first.',
 
   // ── Checkout ──────────────────────────────────────────────
   'checkout.kicker':                'Final step',

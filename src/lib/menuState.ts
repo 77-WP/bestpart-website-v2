@@ -117,6 +117,29 @@ export function getServerTime(): string | null {
   return _state.data?.server_time ?? null;
 }
 
+/* ── Cart-level helpers ──────────────────────────────────── */
+export function getCartIssues(
+  items: Array<{ cartId: string; itemId: string; optionIds: string[] }>
+): Map<string, { itemUnavailable: boolean; unavailableOptionIds: string[] }> {
+  const map = new Map<string, { itemUnavailable: boolean; unavailableOptionIds: string[] }>();
+  for (const item of items) {
+    const itemUnavailable = isItemUnavailable(item.itemId);
+    const unavailableOptionIds = item.optionIds.filter(id => isOptionUnavailable(id));
+    if (itemUnavailable || unavailableOptionIds.length > 0) {
+      map.set(item.cartId, { itemUnavailable, unavailableOptionIds });
+    }
+  }
+  return map;
+}
+
+export function cartHasBlocking(
+  items: Array<{ itemId: string; optionIds: string[] }>
+): boolean {
+  return items.some(
+    item => isItemUnavailable(item.itemId) || item.optionIds.some(id => isOptionUnavailable(id))
+  );
+}
+
 /* ── Hook ────────────────────────────────────────────────── */
 export function useMenuState() {
   const [tick, setTick] = useState(0);

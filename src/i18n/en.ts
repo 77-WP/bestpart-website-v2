@@ -226,6 +226,8 @@ export const EN: Dict = {
   'track.notFound':          'Order not found',
   'track.backHome':          'Back to home',
   'track.noItems':           'No items',
+  'track.loadError':         'Connection failed',
+  'track.retry':             'Try again',
 
   // ── Menu availability ─────────────────────────────────────
   'menu.unavailable':       'Unavailable',

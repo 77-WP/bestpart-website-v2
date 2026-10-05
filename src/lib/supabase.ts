@@ -46,6 +46,7 @@ export type GetOrderResult = {
   payment_method: string | null
   fulfillment_type: string
   ordered_at: string
+  estimated_ready_at: string | null
   requested_ready_at: string | null
   ready_at: string | null
   picked_up_at: string | null

@@ -16,10 +16,12 @@ function toBkkHHMM(date: Date): string {
   return `${String(bkk.getUTCHours()).padStart(2, '0')}:${String(bkk.getUTCMinutes()).padStart(2, '0')}`;
 }
 
-/* ── ETA from requested_ready_at or ordered_at + prepMinutes ── */
+/* ── ETA: estimated_ready_at → requested_ready_at → fallback ── */
 function calcEta(order: GetOrderResult): { hhmm: string; minsLeft: number } | null {
   let etaMs: number;
-  if (order.requested_ready_at) {
+  if (order.estimated_ready_at) {
+    etaMs = new Date(order.estimated_ready_at).getTime();
+  } else if (order.requested_ready_at) {
     etaMs = new Date(order.requested_ready_at).getTime();
   } else {
     etaMs = new Date(order.ordered_at).getTime() + SHOP.prepMinutes * 60_000;
@@ -90,9 +92,11 @@ export default function Track() {
   const navigate      = useNavigate();
   const { t, lang, dict } = useT();
 
-  const [order,    setOrder]    = useState<(GetOrderResult & { status: string }) | null>(null);
-  const [loading,  setLoading]  = useState(true);
-  const [notFound, setNotFound] = useState(false);
+  const [order,      setOrder]     = useState<(GetOrderResult & { status: string }) | null>(null);
+  const [loading,    setLoading]   = useState(true);
+  const [notFound,   setNotFound]  = useState(false);
+  const [loadError,  setLoadError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const [sheetVisible, setSheetVisible] = useState(false);
   const [sheetOpen,    setSheetOpen]    = useState(false);
   const prevStatus = useRef<string>('');
@@ -119,10 +123,13 @@ export default function Track() {
           setNotFound(true);
           stopped = true;
           if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+        } else if (loading) {
+          setLoadError(true);
         }
         if (loading) setLoading(false);
         return;
       }
+      setLoadError(false);
       const raw = data as GetOrderResult;
       const normalized = normalizeOrderStatus(raw.status);
       if (normalized !== prevStatus.current) {
@@ -164,7 +171,7 @@ export default function Track() {
       stopInterval();
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [orderId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [orderId, retryCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Sheet helpers ────────────────────────────────────── */
   function openSheet()  {
@@ -177,7 +184,24 @@ export default function Track() {
   }
 
   if (loading)            return <Skeleton />;
-  if (notFound || !order) return <OrderNotFound orderId={orderId ?? ''} />;
+  if (notFound)           return <OrderNotFound orderId={orderId ?? ''} />;
+  if (loadError || !order) return (
+    <div className="page" style={{
+      paddingBottom: 80, display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      minHeight: '100dvh', gap: 12, textAlign: 'center', padding: '0 32px',
+    }}>
+      <div style={{ fontSize: 13, color: 'var(--ink-3)' }}>{t('track.loadError')}</div>
+      <button
+        onClick={() => { setLoadError(false); setLoading(true); setRetryCount(c => c + 1); }}
+        style={{
+          background: 'var(--ink)', color: 'var(--on-accent)',
+          border: 0, padding: '12px 24px', borderRadius: 'var(--r-pill)',
+          fontWeight: 600, fontSize: 13,
+        }}
+      >{t('track.retry')}</button>
+    </div>
+  );
 
   const status   = order.status ?? 'pending';
   const stepIdx  = BAR_STEP[status] ?? -1;

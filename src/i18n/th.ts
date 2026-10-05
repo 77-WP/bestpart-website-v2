@@ -229,6 +229,8 @@ export const TH = {
   'track.notFound':          'ไม่พบออเดอร์',
   'track.backHome':          'กลับหน้าแรก',
   'track.noItems':           'ไม่มีข้อมูลรายการ',
+  'track.loadError':         'เชื่อมต่อไม่สำเร็จ',
+  'track.retry':             'ลองใหม่',
 
   // ── Menu availability ─────────────────────────────────────
   'menu.unavailable':       'หมดชั่วคราว',

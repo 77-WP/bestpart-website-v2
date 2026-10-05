@@ -1,13 +1,20 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart, cartTotal, itemTotal } from '../store/cart';
 import { useT } from '../i18n';
 import { supabase, readFnError } from '../lib/supabase';
 import { I } from '../components/icons';
-import { SHOP, shopCloseLabel, computeShopStatus, roundUp5, minToHHMM, type ShopStatus } from '../config/shop';
+import { SHOP, shopCloseLabel, computeShopStatus, roundUp5, minToHHMM } from '../config/shop';
 import { TEST_MODE, ENABLE_BEAM, CURBSIDE_PROMPTPAY_ONLY } from '../config/env';
 import { LINKS } from '../config/links';
 import { saveLocalOrder } from '../lib/localOrders';
+import {
+  useShopStatusServer,
+  getShop,
+  getPaymentChannels,
+  refreshMenuState,
+  cartHasBlocking,
+} from '../lib/menuState';
 
 /* ── Constants ───────────────────────────────────────────── */
 const METHODS = [
@@ -63,12 +70,11 @@ const inputBase: React.CSSProperties = {
   outline: 'none',
 };
 
-/* Build TEST_MODE-safe ShopStatus */
-function makeShopInfo(): ShopStatus {
+/* Build TEST_MODE-safe ShopStatus (used only for slot validity check at submit time) */
+function makeShopInfo() {
   const base = computeShopStatus();
   if (!TEST_MODE) return base;
   if (base.isOpen && base.slots.length > 0) return base;
-  // Force open with ASAP slot when outside hours in TEST_MODE
   const now    = new Date();
   const bkk    = new Date(now.getTime() + 7 * 3600 * 1000);
   const nowMin = bkk.getUTCHours() * 60 + bkk.getUTCMinutes();
@@ -104,8 +110,9 @@ export default function Checkout() {
     setSlotExpiredMsg(false);
   }
 
-  /* ── Shop info — recomputed every minute ────────────────── */
-  const [shopInfo, setShopInfo] = useState<ShopStatus>(makeShopInfo);
+  /* ── Shop info — sourced from server menu-state poll ────── */
+  const shopInfo   = useShopStatusServer();
+  const isPreorder = shopInfo.serverShopStatus === 'preorder';
 
   function shopClosedMsg(): string {
     if (shopInfo.forcedClosed && shopInfo.reopenAt) {
@@ -122,23 +129,18 @@ export default function Checkout() {
   const [selSlot,        setSelSlot]        = useState<string | null | undefined>(undefined);
   const [slotExpiredMsg, setSlotExpiredMsg] = useState(false);
 
-  const recompute = useCallback(() => {
-    const fresh = makeShopInfo();
-    setShopInfo(fresh);
-    // If a fixed slot was selected and it no longer exists, deselect
+  // When slots update from server poll, deselect any fixed slot that no longer exists
+  const slotsKey = shopInfo.slots.map(s => s.value ?? 'asap').join(',');
+  useEffect(() => {
     if (typeof selSlot === 'string') {
-      const stillValid = fresh.slots.some(s => s.value === selSlot);
+      const stillValid = shopInfo.slots.some(s => s.value === selSlot);
       if (!stillValid) {
         setSelSlot(undefined);
         setSlotExpiredMsg(true);
       }
     }
-  }, [selSlot]);
-
-  useEffect(() => {
-    const t = setInterval(recompute, 60_000);
-    return () => clearInterval(t);
-  }, [recompute]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slotsKey]);
 
   /* ── Contact — prefill from localStorage ───────────────── */
   const [name,         setName]         = useState('');
@@ -188,6 +190,24 @@ export default function Checkout() {
     if (isCurbside && CURBSIDE_PROMPTPAY_ONLY) setPayment('promptpay');
   }, [isCurbside]);
 
+  /* Server payment channels */
+  const serverChannels    = getPaymentChannels();
+  const channelKey        = serverChannels.map(c => c.key).join(',');
+  const activePaymentIds: string[] = serverChannels.length > 0
+    ? serverChannels.map(c => c.key === 'promptpay_qr' ? 'promptpay' : 'cash')
+    : ['promptpay', 'cash'];
+  const noPaymentChannels = serverChannels.length > 0 && activePaymentIds.length === 0;
+
+  /* Switch away from a payment method that the server has disabled */
+  useEffect(() => {
+    if (isCurbside && CURBSIDE_PROMPTPAY_ONLY) return;
+    if (serverChannels.length === 0) return;
+    if (!activePaymentIds.includes(payment) && activePaymentIds.length > 0) {
+      setPayment(activePaymentIds[0]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channelKey, payment, isCurbside]);
+
   /* ── Summary collapsible ─────────────────────────────────  */
   const [summaryOpen, setSummaryOpen] = useState(false);
 
@@ -208,6 +228,9 @@ export default function Checkout() {
   const itemCount  = items.reduce((s, i) => s + i.qty, 0);
   const nameOk     = name.trim().length > 0;
   const phoneOk    = isPhoneOk(phone);
+
+  const hasBlockingItems  = cartHasBlocking(items.map(i => ({ itemId: i.itemId, optionIds: i.optionIds })));
+  const isEffectivelyClosed = !shopInfo.isOpen || noPaymentChannels;
 
   // Which fixed slot (if any) is currently selected — for confirmation line
   const selectedSlotObj = selSlot === null
@@ -268,10 +291,24 @@ export default function Checkout() {
       phoneRef.current?.focus();
       return;
     }
-    if (!shopInfo.isOpen) return;
+    if (isEffectivelyClosed) return;
 
     setLoading(true);
     setError(null);
+
+    // Server-side pre-check: refresh state then guard on closed / cart blocked
+    await refreshMenuState();
+    const freshShop = getShop();
+    if (freshShop?.status === 'closed') {
+      setLoading(false);
+      setError(t('order.error.shop_closed'));
+      return;
+    }
+    if (cartHasBlocking(items.map(i => ({ itemId: i.itemId, optionIds: i.optionIds })))) {
+      setLoading(false);
+      setError(t('cart.blocked'));
+      return;
+    }
 
     // Idempotency key — create once per order attempt, reuse on retry, clear on success
     let idempotencyKey = sessionStorage.getItem(IDEM_KEY);
@@ -336,6 +373,9 @@ export default function Checkout() {
         }
       })();
       setError(errorMsg);
+      if (code === 'shop_closed' || code === 'item_unavailable' || code === 'option_unavailable') {
+        void refreshMenuState();
+      }
       return;
     }
 
@@ -678,7 +718,7 @@ export default function Checkout() {
                         background: 'rgba(178,58,31,0.10)',
                         padding: '1px 5px', borderRadius: 'var(--r-pill)',
                       }}>
-                        {t('checkout.timeEarliestBadge')}
+                        {isPreorder ? t('checkout.preorderLabel') : t('checkout.timeEarliestBadge')}
                       </span>
                     )}
                     <div style={{
@@ -695,6 +735,13 @@ export default function Checkout() {
                 );
               })}
             </div>
+
+            {/* Preorder note */}
+            {isPreorder && shopInfo.preorderOpensAtHHMM && (
+              <div style={{ marginTop: 8, fontSize: 11, color: 'var(--ink-3)' }}>
+                {t('checkout.preorderNote', shopInfo.preorderOpensAtHHMM)}
+              </div>
+            )}
 
             {/* Confirmation line */}
             {selSlot !== undefined && selectedSlotObj && (
@@ -812,6 +859,7 @@ export default function Checkout() {
           { id: 'promptpay', label: t('checkout.promptpayLabel'), sub: t('checkout.promptpaySub'), icon: I.qr(16) },
           { id: 'cash',      label: t('checkout.cashLabel'),      sub: t('checkout.cashSub'),      icon: I.cash(16) },
         ]
+          .filter(p => activePaymentIds.includes(p.id))
           .filter(p => ENABLE_BEAM || p.id !== 'promptpay')
           .filter(p => !(isCurbside && CURBSIDE_PROMPTPAY_ONLY && p.id === 'cash'))
           .map(p => (
@@ -894,6 +942,14 @@ export default function Checkout() {
         padding: '12px 18px calc(env(safe-area-inset-bottom, 0px) + 18px)',
         background: 'var(--bg)', borderTop: '1px solid var(--line)', zIndex: 30,
       }}>
+        {/* Cart blocked — reserved space prevents layout jump */}
+        <div style={{
+          marginBottom: 8, fontSize: 11, color: 'var(--accent)',
+          textAlign: 'center', fontWeight: 600,
+          visibility: hasBlockingItems ? 'visible' : 'hidden',
+        }}>
+          {t('cart.blocked')}
+        </div>
         {error && (
           <div style={{
             marginBottom: 8, padding: '10px 14px', borderRadius: 'var(--r-md)',
@@ -913,6 +969,7 @@ export default function Checkout() {
         )}
         <button
           onClick={handleConfirm}
+          aria-disabled={isEffectivelyClosed || hasBlockingItems || loading || undefined}
           disabled={loading}
           style={{
             width: '100%',
@@ -921,14 +978,14 @@ export default function Checkout() {
             border: 0, padding: '16px 18px', borderRadius: 'var(--r-pill)',
             fontWeight: 600, fontSize: 13, letterSpacing: '.04em',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            cursor: loading ? 'default' : 'pointer',
-            opacity: loading ? 0.75 : 1,
+            cursor: loading || isEffectivelyClosed || hasBlockingItems ? 'default' : 'pointer',
+            opacity: loading || isEffectivelyClosed || hasBlockingItems ? 0.75 : 1,
           }}
         >
           <span>
             {loading
               ? t('checkout.orderLoading')
-              : !shopInfo.isOpen
+              : isEffectivelyClosed
                 ? t('checkout.shopClosedLabel')
                 : payment === 'promptpay'
                   ? t('checkout.payBtnQR', total)

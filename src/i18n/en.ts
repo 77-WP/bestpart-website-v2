@@ -162,6 +162,8 @@ export const EN: Dict = {
   'checkout.validTime':             'Choose a pickup time',
   'checkout.validName':             'Enter your name',
   'checkout.validPhone':            'Invalid phone number',
+  'checkout.preorderLabel':         'Pre-order',
+  'checkout.preorderNote':          (time: string) => `We open at ${time} · we'll start cooking once we open`,
   'checkout.shopClosedLabel':       'Shop is closed',
   'checkout.shopClosedNext':        (next: string) => `Next open ${next}`,
   'checkout.orderLoading':          'Creating order…',

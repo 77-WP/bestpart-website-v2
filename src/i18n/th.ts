@@ -165,6 +165,8 @@ export const TH = {
   'checkout.validTime':             'เลือกเวลารับ',
   'checkout.validName':             'กรอกชื่อ',
   'checkout.validPhone':            'เบอร์โทรไม่ถูกต้อง',
+  'checkout.preorderLabel':         'สั่งล่วงหน้า',
+  'checkout.preorderNote':          (time: string) => `ร้านเปิด ${time} · เราจะเริ่มทำเมื่อร้านเปิด`,
   'checkout.shopClosedLabel':       'ร้านปิดอยู่',
   'checkout.shopClosedNext':        (next: string) => `เปิดครั้งถัดไป ${next}`,
   'checkout.orderLoading':          'กำลังสร้างออเดอร์…',

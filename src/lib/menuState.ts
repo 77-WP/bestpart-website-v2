@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './supabase';
+import { computeShopStatus, minToHHMM, SHOP, type ShopStatus, type TimeSlot } from '../config/shop';
 
 /* ── Types ───────────────────────────────────────────────── */
 type ItemState = {
@@ -14,8 +15,25 @@ type OptionState = {
   restore_at: string | null;
 };
 
+type ShopData = {
+  status: 'open' | 'preorder' | 'closed';
+  reason?: string;
+  opens_at?: string;
+  closes_at?: string;
+  reopens_at?: string;
+};
+
+export type PaymentChannel = {
+  key: 'promptpay_qr' | 'cash';
+  name: string;
+};
+
 type MenuStateData = {
   server_time: string;
+  shop: ShopData;
+  preorder_minutes: number;
+  prep_minutes: number;
+  payment_channels: PaymentChannel[];
   items: ItemState[];
   options: OptionState[];
 };
@@ -117,6 +135,23 @@ export function getServerTime(): string | null {
   return _state.data?.server_time ?? null;
 }
 
+export function getShop(): ShopData | null {
+  return _state.data?.shop ?? null;
+}
+
+export function getPaymentChannels(): PaymentChannel[] {
+  return _state.data?.payment_channels ?? [];
+}
+
+export function getPrepMinutes(): number {
+  return _state.data?.prep_minutes ?? SHOP.prepMinutes;
+}
+
+export async function refreshMenuState(): Promise<void> {
+  _fetching = false;
+  await _fetch();
+}
+
 /* ── Cart-level helpers ──────────────────────────────────── */
 export function getCartIssues(
   items: Array<{ cartId: string; itemId: string; optionIds: string[] }>
@@ -140,7 +175,71 @@ export function cartHasBlocking(
   );
 }
 
-/* ── Hook ────────────────────────────────────────────────── */
+/* ── Server shop status ──────────────────────────────────── */
+
+/** ShopStatus extended with server-side shop status field. */
+export type ServerShopStatus = ShopStatus & {
+  /** null = server data not yet loaded (using local fallback) */
+  serverShopStatus: 'open' | 'preorder' | 'closed' | null;
+  /** HH:MM Bangkok time of opens_at — only when serverShopStatus === 'preorder' */
+  preorderOpensAtHHMM?: string;
+};
+
+function _mapToServerShopStatus(): ServerShopStatus {
+  const shopData = _state.data?.shop;
+  if (!shopData) {
+    return { ...computeShopStatus(), serverShopStatus: null };
+  }
+
+  if (shopData.status === 'closed') {
+    const local = computeShopStatus();
+    return {
+      isOpen:       false,
+      slots:        [],
+      nextOpenMsg:  local.nextOpenMsg,
+      previewOpen:  false,
+      forcedClosed: !!shopData.reopens_at,
+      reopenAt:     shopData.reopens_at ? new Date(shopData.reopens_at) : null,
+      serverShopStatus: 'closed',
+    };
+  }
+
+  if (shopData.status === 'preorder') {
+    const prepMin = _state.data?.prep_minutes ?? SHOP.prepMinutes;
+    if (!shopData.opens_at) {
+      return { ...computeShopStatus(), serverShopStatus: 'preorder' };
+    }
+    const opensAtDate = new Date(shopData.opens_at);
+    const opensAtBkk  = new Date(opensAtDate.getTime() + 7 * 3_600_000);
+    const opensAtMin  = opensAtBkk.getUTCHours() * 60 + opensAtBkk.getUTCMinutes();
+    const pickupMin   = opensAtMin + prepMin; // no rounding per spec
+    const serverNow   = _serverNow();
+    const nowBkk      = new Date(serverNow + 7 * 3_600_000);
+    const nowMin      = nowBkk.getUTCHours() * 60 + nowBkk.getUTCMinutes();
+    const slot: TimeSlot = {
+      label:   minToHHMM(pickupMin),
+      diffMin: pickupMin - nowMin,
+      value:   null,   // asap → server picks exact time
+      isAsap:  true,
+    };
+    return {
+      isOpen:       true,
+      slots:        [slot],
+      nextOpenMsg:  '',
+      previewOpen:  false,
+      forcedClosed: false,
+      reopenAt:     null,
+      serverShopStatus:     'preorder',
+      preorderOpensAtHHMM:  minToHHMM(opensAtMin),
+    };
+  }
+
+  // status === 'open'
+  const base = computeShopStatus();
+  return { ...base, serverShopStatus: 'open' };
+}
+
+/* ── Hooks ───────────────────────────────────────────────── */
 export function useMenuState() {
   const [tick, setTick] = useState(0);
 
@@ -154,4 +253,24 @@ export function useMenuState() {
   }, []);
 
   return { isItemUnavailable, itemRestoreAt, isOptionUnavailable, getServerTime, tick };
+}
+
+/**
+ * React hook: shop status sourced from the server menu-state poll.
+ * Falls back to computeShopStatus() until server data arrives.
+ * Updates every time the menu-state poll fires (~30 s).
+ */
+export function useShopStatusServer(): ServerShopStatus {
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const listener = () => setTick(n => n + 1);
+    _listeners.add(listener);
+    if (!_state.data) void _fetch();
+    _startPoll();
+    _setupGlobal();
+    return () => { _listeners.delete(listener); };
+  }, []);
+
+  return _mapToServerShopStatus();
 }

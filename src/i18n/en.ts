@@ -266,4 +266,7 @@ export const EN: Dict = {
 
   // ── Shop status ───────────────────────────────────────────
   'shop.forcedClosed': (date: string, time: string) => `Temporarily closed · Reopening ${date} ${time}`,
+
+  // ── Menu preorder banner ───────────────────────────────────
+  'menu.preorderBanner': (time: string) => `Pre-orders open · we open at ${time}`,
 };

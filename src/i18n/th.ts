@@ -269,6 +269,9 @@ export const TH = {
 
   // ── Shop status ───────────────────────────────────────────
   'shop.forcedClosed': (date: string, time: string) => `ปิดชั่วคราว · เปิดอีกครั้ง ${date} ${time}`,
+
+  // ── Menu preorder banner ───────────────────────────────────
+  'menu.preorderBanner': (time: string) => `รับออเดอร์ล่วงหน้า · ร้านเปิด ${time}`,
 } as const;
 
 type RawDict = typeof TH;

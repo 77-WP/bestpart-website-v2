@@ -8,9 +8,7 @@ import { I } from '../components/icons';
 import { ProductSheet } from '../components/menu/ProductSheet';
 import { useT } from '../i18n';
 import { supabase } from '../lib/supabase';
-import { useMenuState, getCartIssues, cartHasBlocking, isItemUnavailable } from '../lib/menuState';
-import { computeShopStatus } from '../config/shop';
-import { TEST_MODE } from '../config/env';
+import { useMenuState, getCartIssues, cartHasBlocking, isItemUnavailable, useShopStatusServer } from '../lib/menuState';
 
 /* ── Drinks ──────────────────────────────────────────────── */
 const DRINKS_CAT_NAME_TH = 'เครื่องดื่ม';
@@ -70,15 +68,8 @@ export default function Cart() {
   /* ProductSheet: item param opens sheet (editCartId read by ProductSheet) */
   const itemId = searchParams.get('item');
 
-  /* Shop info for ProductSheet */
-  const [shopInfo] = useState(() => {
-    const base = computeShopStatus();
-    if (!TEST_MODE) return base;
-    const slots = base.slots.length > 0
-      ? base.slots
-      : [{ label: 'พร้อมเร็วสุด', sub: `~12 นาที`, value: null, isAsap: true as const }];
-    return { ...base, isOpen: true, slots, nextOpenMsg: '' };
-  });
+  /* Shop info sourced from server */
+  const shopInfo = useShopStatusServer();
 
   function shopClosedMsg(): string {
     if (shopInfo.forcedClosed && shopInfo.reopenAt) {
@@ -584,20 +575,20 @@ export default function Cart() {
       }}>
         <div style={{
           fontSize: 12, color: 'var(--accent)', marginBottom: 8, textAlign: 'center', lineHeight: 1.4,
-          visibility: blocked ? 'visible' : 'hidden',
+          visibility: (blocked || !shopInfo.isOpen) ? 'visible' : 'hidden',
         }}>
-          {t('cart.blocked')}
+          {blocked ? t('cart.blocked') : shopClosedMsg()}
         </div>
         <button
-          onClick={!blocked ? () => navigate('/checkout') : undefined}
-          aria-disabled={blocked}
+          onClick={(!blocked && shopInfo.isOpen) ? () => navigate('/checkout') : undefined}
+          aria-disabled={blocked || !shopInfo.isOpen}
           style={{
             width: '100%', background: 'var(--ink)', color: 'var(--on-accent)',
             border: 0, padding: '16px 18px', borderRadius: 'var(--r-pill)',
             fontWeight: 600, fontSize: 13, letterSpacing: '.04em',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            opacity: blocked ? 0.45 : 1,
-            cursor: blocked ? 'default' : 'pointer',
+            opacity: (blocked || !shopInfo.isOpen) ? 0.45 : 1,
+            cursor: (blocked || !shopInfo.isOpen) ? 'default' : 'pointer',
           }}
         >
           <span>{t('cart.continueBtn', total)}</span>

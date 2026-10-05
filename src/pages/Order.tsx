@@ -6,12 +6,12 @@ import { Bowl } from '../components/Bowl';
 import { CartBar } from '../components/CartBar';
 import { TabBar } from '../components/TabBar';
 import { I } from '../components/icons';
-import { SHOP, computeShopStatus, shopCloseLabel } from '../config/shop';
+import { SHOP, shopCloseLabel } from '../config/shop';
 import { TEST_MODE } from '../config/env';
 import { ProductSheet } from '../components/menu/ProductSheet';
 import { FEATURED_KEYWORD } from '../config/featured';
 import { useT } from '../i18n';
-import { useMenuState } from '../lib/menuState';
+import { useMenuState, useShopStatusServer } from '../lib/menuState';
 
 /* ── Types ───────────────────────────────────────────────── */
 type Category = {
@@ -94,14 +94,7 @@ export default function Order() {
 
   const method = searchParams.get('method') ?? 'dine-in';
   const itemId = searchParams.get('item');
-  const [shopInfo] = useState(() => {
-    const base = computeShopStatus();
-    if (!TEST_MODE) return base;
-    const slots = base.slots.length > 0
-      ? base.slots
-      : [{ label: 'พร้อมเร็วสุด', sub: `~${SHOP.prepMinutes} นาที`, value: null, isAsap: true as const }];
-    return { ...base, isOpen: true, slots, nextOpenMsg: '' };
-  });
+  const shopInfo = useShopStatusServer();
 
   function shopClosedMsg(): string {
     if (shopInfo.forcedClosed && shopInfo.reopenAt) {
@@ -298,7 +291,7 @@ export default function Order() {
         background: 'var(--bg)',
         borderBottom: '1px solid var(--line)',
       }}>
-        {!shopInfo.isOpen && (
+        {shopInfo.serverShopStatus === 'closed' && (
           <div style={{
             padding: '7px 18px',
             background: 'rgba(43,33,24,0.07)',
@@ -307,6 +300,15 @@ export default function Order() {
           }}>
             <span style={{ fontWeight: 700, color: 'var(--ink)' }}>{shopClosedMsg()}</span>
             <span>{t('menu.header.closed.browse')}</span>
+          </div>
+        )}
+        {shopInfo.serverShopStatus === 'preorder' && shopInfo.preorderOpensAtHHMM != null && (
+          <div style={{
+            padding: '7px 18px',
+            background: 'rgba(43,33,24,0.07)',
+            fontSize: 12, color: 'var(--ink-2)',
+          }}>
+            {t('menu.preorderBanner', shopInfo.preorderOpensAtHHMM)}
           </div>
         )}
         <div style={{ padding: '10px 18px', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -614,8 +616,8 @@ export default function Order() {
                               aria-disabled={heroUnavail}
                               style={{
                                 width: 38, height: 38, borderRadius: '50%',
-                                background: (heroUnavail || !shopInfo.isOpen) ? 'var(--bg-3)' : 'var(--ink)',
-                                color: (heroUnavail || !shopInfo.isOpen) ? 'var(--ink-3)' : 'var(--on-accent)',
+                                background: heroUnavail ? 'var(--bg-3)' : 'var(--ink)',
+                                color: heroUnavail ? 'var(--ink-3)' : 'var(--on-accent)',
                                 border: 0, display: 'grid', placeItems: 'center',
                                 cursor: heroUnavail ? 'default' : 'pointer', flexShrink: 0,
                               }}
@@ -743,8 +745,8 @@ export default function Order() {
                                   aria-disabled={itUnavail}
                                   style={{
                                     width: 24, height: 24, borderRadius: '50%',
-                                    background: (itUnavail || !shopInfo.isOpen) ? 'var(--bg-3)' : 'var(--ink)',
-                                    color: (itUnavail || !shopInfo.isOpen) ? 'var(--ink-3)' : 'var(--on-accent)',
+                                    background: itUnavail ? 'var(--bg-3)' : 'var(--ink)',
+                                    color: itUnavail ? 'var(--ink-3)' : 'var(--on-accent)',
                                     border: 0, display: 'grid', placeItems: 'center',
                                     cursor: itUnavail ? 'default' : 'pointer', flexShrink: 0,
                                   }}
@@ -769,7 +771,7 @@ export default function Order() {
 
       {itemId && (
         <ProductSheet
-          isShopOpen={shopInfo.isOpen}
+          isShopOpen={true}
           shopClosedMsg={shopClosedMsg()}
           categories={catForSheet}
         />

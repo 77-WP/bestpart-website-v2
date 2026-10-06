@@ -195,6 +195,7 @@ export const TH = {
   'pay.retryBtn':          'ลองอีกครั้ง',
   'pay.errorTitle':        'เกิดข้อผิดพลาด',
   'pay.closeOverlay':      'ปิด',
+  'pay.amountMismatch':    'ยอดชำระไม่ตรงกับออเดอร์ กรุณาอย่าโอนเงิน และติดต่อเราทาง LINE ทันที',
 
   // ── Track ─────────────────────────────────────────────────
   'track.title':             'ออเดอร์ของคุณ',
@@ -231,6 +232,10 @@ export const TH = {
   'track.noItems':           'ไม่มีข้อมูลรายการ',
   'track.loadError':         'เชื่อมต่อไม่สำเร็จ',
   'track.retry':             'ลองใหม่',
+  'track.cancelledHeadline': 'ออเดอร์ถูกยกเลิก',
+  'track.cancelledSub':      'ถ้าชำระเงินแล้ว กรุณาติดต่อเราทาง LINE เพื่อคืนเงิน',
+  'track.expiredHeadline':   'QR หมดอายุแล้ว',
+  'track.expiredSub':        'ยังไม่มีการตัดเงิน สั่งใหม่ได้เลย',
 
   // ── Menu availability ─────────────────────────────────────
   'menu.unavailable':       'หมดชั่วคราว',
@@ -273,6 +278,13 @@ export const TH = {
   'order.error.rate_limited':        'ทำรายการถี่เกินไป กรุณารอสักครู่แล้วลองใหม่ครับ',
   'order.error.option_requires_missing': 'กรุณาเลือกไข่ที่ต้องการเพิ่มก่อน',
   'order.error.fallback':            'ส่งออเดอร์ไม่สำเร็จ กรุณาลองใหม่อีกครั้งครับ',
+  'order.error.invalid_name':               'กรุณากรอกชื่อให้ถูกต้อง',
+  'order.error.invalid_option':             'ตัวเลือกบางอย่างเปลี่ยนไป กรุณากลับไปเลือกใหม่',
+  'order.error.single_select_required':     'กรุณาเลือกตัวเลือกให้ครบ',
+  'order.error.vehicle_required':           'กรุณากรอกสีและยี่ห้อรถสำหรับเสิร์ฟถึงรถ',
+  'order.error.curbside_requires_promptpay': 'เสิร์ฟถึงรถรับชำระด้วย QR เท่านั้น',
+  'order.error.payment_method_unavailable': 'ช่องทางชำระเงินนี้ปิดอยู่ กรุณาเลือกช่องทางอื่น',
+  'order.error.server_error':               'ระบบขัดข้องชั่วคราว ลองใหม่อีกครั้ง หรือแจ้งเราทาง LINE',
 
   // ── Shop status ───────────────────────────────────────────
   'shop.forcedClosed': (date: string, time: string) => `ปิดชั่วคราว · เปิดอีกครั้ง ${date} ${time}`,
@@ -291,6 +303,9 @@ export const TH = {
   'privacy.ack':     'รับทราบ',
   'privacy.details': 'รายละเอียด',
   'privacy.link':    'ความเป็นส่วนตัว',
+
+  // ── App ───────────────────────────────────────────────────
+  'app.configError': 'ระบบกำลังปรับปรุง กรุณาติดต่อเราทาง LINE',
 } as const;
 
 type RawDict = typeof TH;

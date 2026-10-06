@@ -1,11 +1,21 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const supabaseUrl     = import.meta.env.VITE_SUPABASE_URL     as string | undefined
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  realtime: { params: { eventsPerSecond: 10 } },
-})
+const _missing: string[] = []
+if (!supabaseUrl)     _missing.push('VITE_SUPABASE_URL')
+if (!supabaseAnonKey) _missing.push('VITE_SUPABASE_ANON_KEY')
+if (_missing.length)  _missing.forEach(v => console.error(`[supabase] Missing env var: ${v}`))
+
+/** True when required Supabase env vars are absent — show config-error page instead of the app */
+export const supabaseConfigMissing = _missing.length > 0
+
+export const supabase = createClient(
+  supabaseUrl     ?? 'https://placeholder.supabase.co',
+  supabaseAnonKey ?? 'placeholder',
+  { realtime: { params: { eventsPerSecond: 10 } } },
+)
 
 /* Order status → step index */
 export const STATUS_STEP: Record<string, number> = {
@@ -78,7 +88,7 @@ export function normalizeOrderStatus(raw: string): string {
     case 'cooking':
     case 'assembly':               return 'preparing'
     case 'picked_up':              return 'ready'
-    case 'expired':                return 'cancelled'
+    case 'expired':                return 'expired'
     case 'refunded':
     case 'partially_refunded':     return 'completed'
     default:                       return raw   // pass-through: pending, preparing, ready, completed, cancelled, awaiting_payment

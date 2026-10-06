@@ -414,6 +414,14 @@ export default function Checkout() {
           case 'invalid_pickup_time': return t('order.error.invalid_pickup_time');
           case 'invalid_phone':       return t('order.error.invalid_phone');
           case 'rate_limited':        return t('order.error.rate_limited');
+          case 'invalid_name':               return t('order.error.invalid_name');
+          case 'invalid_option':             return t('order.error.invalid_option');
+          case 'single_select_required':     return t('order.error.single_select_required');
+          case 'vehicle_required':           return t('order.error.vehicle_required');
+          case 'curbside_requires_promptpay': return t('order.error.curbside_requires_promptpay');
+          case 'payment_method_unavailable': return t('order.error.payment_method_unavailable');
+          case 'invalid_request':
+          case 'server_error':               return t('order.error.server_error');
           default:                    return t('order.error.fallback');
         }
       })();

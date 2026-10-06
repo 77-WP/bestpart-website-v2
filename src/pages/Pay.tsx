@@ -6,12 +6,13 @@ import type { GetOrderResult } from '../lib/supabase';
 import { I } from '../components/icons';
 import { TEST_MODE } from '../config/env';
 import { HelpLink } from '../components/HelpLink';
+import { track } from '../lib/analytics';
 
 type QrState =
   | { phase: 'loading' }
   | { phase: 'ready'; qrImage: string; expiresAt: string; chargeId: string; amountSatang: number }
   | { phase: 'expired' }
-  | { phase: 'error'; message: string };
+  | { phase: 'error'; message: string; code?: string };
 
 /* ── Countdown to expiry ─────────────────────────────────── */
 function useCountdown(expiresAt: string | null): number | null {
@@ -98,12 +99,39 @@ export default function Pay() {
           });
           return;
         }
+        /* ── Amount cross-check against get-order ─────────── */
+        const amountSatang = data.amount as number;
+        let verifiedAmountSatang = amountSatang;
+
+        const fetchOrderAmount = async (): Promise<number | null> => {
+          const { data: od, error: oe } = await supabase.functions.invoke('get-order', {
+            body: { order_id: orderId },
+          });
+          if (oe || !od) return null;
+          return Math.round((od as GetOrderResult).grand_total * 100);
+        };
+
+        let expected = await fetchOrderAmount();
+        if (expected === null) {
+          expected = await fetchOrderAmount(); // retry once on network failure
+        }
+
+        if (expected !== null) {
+          if (expected !== amountSatang) {
+            track('payment_failed', { code: 'amount_mismatch' });
+            setState({ phase: 'error', message: t('pay.amountMismatch'), code: 'amount_mismatch' });
+            return;
+          }
+          verifiedAmountSatang = expected;
+        }
+        // if expected === null after retry, show QR without blocking
+
         setState({
           phase:        'ready',
           qrImage:      data.qr_image,
           expiresAt:    data.expires_at,
           chargeId:     data.charge_id,
-          amountSatang: data.amount,
+          amountSatang: verifiedAmountSatang,
         });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : 'เกิดข้อผิดพลาด';
@@ -421,16 +449,20 @@ export default function Pay() {
           <div style={{ color: 'var(--ink-3)', opacity: 0.5 }}>{I.receipt(48)}</div>
           <div style={{ fontFamily: 'var(--serif)', fontSize: 20 }}>{t('pay.errorTitle')}</div>
           <div style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.6 }}>{state.message}</div>
-          <button
-            onClick={fetchQr}
-            style={{
-              marginTop: 8, background: 'var(--ink)', color: 'var(--on-accent)',
-              border: 0, padding: '14px 32px', borderRadius: 'var(--r-pill)',
-              fontWeight: 600, fontSize: 13, cursor: 'pointer',
-            }}
-          >
-            {t('pay.retryBtn')}
-          </button>
+          {state.code === 'amount_mismatch' ? (
+            <HelpLink variant="urgent" />
+          ) : (
+            <button
+              onClick={fetchQr}
+              style={{
+                marginTop: 8, background: 'var(--ink)', color: 'var(--on-accent)',
+                border: 0, padding: '14px 32px', borderRadius: 'var(--r-pill)',
+                fontWeight: 600, fontSize: 13, cursor: 'pointer',
+              }}
+            >
+              {t('pay.retryBtn')}
+            </button>
+          )}
         </div>
       )}
 

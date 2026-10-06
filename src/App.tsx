@@ -4,6 +4,9 @@ import { CartProvider } from './store/cart';
 import { LangProvider } from './store/lang';
 import { TEST_MODE } from './config/env';
 import { initAnalytics } from './lib/analytics';
+import { supabaseConfigMissing } from './lib/supabase';
+import { useT } from './i18n';
+import { HelpLink } from './components/HelpLink';
 import Landing  from './pages/Landing';
 import Order    from './pages/Order';
 import Product  from './pages/Product';
@@ -16,10 +19,29 @@ import Privacy  from './pages/Privacy';
 import { PrivacyBanner } from './components/PrivacyBanner';
 
 function AppInner() {
+  const { t } = useT();
+
   useEffect(() => {
-    initAnalytics();
+    if (!supabaseConfigMissing) initAnalytics();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  if (supabaseConfigMissing) {
+    return (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: 'var(--bg)',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        padding: '32px 24px', gap: 16, textAlign: 'center',
+      }}>
+        <div style={{ fontFamily: 'var(--serif)', fontSize: 20, color: 'var(--ink)' }}>
+          {t('app.configError')}
+        </div>
+        <HelpLink />
+      </div>
+    );
+  }
 
   return (
     <>

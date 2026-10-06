@@ -192,6 +192,7 @@ export const EN: Dict = {
   'pay.retryBtn':          'Try again',
   'pay.errorTitle':        'Something went wrong',
   'pay.closeOverlay':      'Close',
+  'pay.amountMismatch':    "The payment amount doesn't match your order. Please do not pay, and message us on LINE right away.",
 
   // ── Track ─────────────────────────────────────────────────
   'track.title':             'Your order',
@@ -228,6 +229,10 @@ export const EN: Dict = {
   'track.noItems':           'No items',
   'track.loadError':         'Connection failed',
   'track.retry':             'Try again',
+  'track.cancelledHeadline': 'Your order was cancelled',
+  'track.cancelledSub':      'If you already paid, please message us on LINE for a refund.',
+  'track.expiredHeadline':   'Your QR has expired',
+  'track.expiredSub':        'You have not been charged. You can order again.',
 
   // ── Menu availability ─────────────────────────────────────
   'menu.unavailable':       'Unavailable',
@@ -270,6 +275,13 @@ export const EN: Dict = {
   'order.error.rate_limited':        'Too many attempts. Please wait a moment and try again.',
   'order.error.option_requires_missing': 'Please add an egg first.',
   'order.error.fallback':            "We couldn't place your order. Please try again.",
+  'order.error.invalid_name':               'Please enter a valid name.',
+  'order.error.invalid_option':             'Some options have changed. Please choose again.',
+  'order.error.single_select_required':     'Please choose all required options.',
+  'order.error.vehicle_required':           "Please enter your car's colour and brand for curbside pickup.",
+  'order.error.curbside_requires_promptpay': 'Curbside pickup is paid by QR only.',
+  'order.error.payment_method_unavailable': 'This payment method is unavailable. Please choose another.',
+  'order.error.server_error':               'Something went wrong. Please try again or message us on LINE.',
 
   // ── Shop status ───────────────────────────────────────────
   'shop.forcedClosed': (date: string, time: string) => `Temporarily closed · Reopening ${date} ${time}`,
@@ -288,4 +300,7 @@ export const EN: Dict = {
   'privacy.ack':     'Got it',
   'privacy.details': 'Details',
   'privacy.link':    'Privacy',
+
+  // ── App ───────────────────────────────────────────────────
+  'app.configError': "We're updating. Please message us on LINE.",
 };

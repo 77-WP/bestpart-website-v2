@@ -39,6 +39,7 @@ const BAR_STEP: Record<string, number> = {
   ready:             2,
   completed:         3,
   cancelled:        -1,
+  expired:          -1,
 };
 
 /* ── Loading skeleton ────────────────────────────────────── */
@@ -141,7 +142,7 @@ export default function Track() {
       setOrder({ ...raw, status: normalized });
       setLoading(false);
       // Stop polling on terminal status
-      if (normalized === 'completed' || normalized === 'cancelled') {
+      if (normalized === 'completed' || normalized === 'cancelled' || normalized === 'expired') {
         stopped = true;
         if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
       }
@@ -327,8 +328,31 @@ export default function Track() {
           </button>
         )}
 
+        {/* Cancelled & expired — HelpLink */}
+        {(status === 'cancelled' || status === 'expired') && (
+          <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+            <HelpLink />
+          </div>
+        )}
+
+        {/* Expired — back to menu button */}
+        {status === 'expired' && (
+          <button
+            onClick={() => navigate('/order')}
+            style={{
+              marginTop: 8,
+              background: 'var(--bg-2)', color: 'var(--ink)',
+              border: '1px solid var(--line)',
+              padding: '12px 28px', borderRadius: 'var(--r-pill)',
+              fontWeight: 600, fontSize: 13, cursor: 'pointer',
+            }}
+          >
+            {t('track.orderMore')}
+          </button>
+        )}
+
         {/* Created time */}
-        {status !== 'completed' && status !== 'awaiting_payment' && (
+        {status !== 'completed' && status !== 'awaiting_payment' && status !== 'cancelled' && status !== 'expired' && (
           <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 8, letterSpacing: '.05em' }}>
             {lang === 'en' ? SHOP.branchNameEn : SHOP.branchName} · {createdHHMM}
           </div>
@@ -697,6 +721,22 @@ function heroConfig(status: string, t: (key: keyof Dict, ...args: any[]) => stri
         bg:       'rgba(74,93,63,0.14)',
         Icon:     () => I.receipt(30),
       };
+    case 'cancelled':
+      return {
+        headline: t('track.cancelledHeadline'),
+        sub:      t('track.cancelledSub'),
+        color:    'var(--ink-3)',
+        bg:       'var(--bg-3)',
+        Icon:     () => I.info(30),
+      };
+    case 'expired':
+      return {
+        headline: t('track.expiredHeadline'),
+        sub:      t('track.expiredSub'),
+        color:    'var(--ink-3)',
+        bg:       'var(--bg-3)',
+        Icon:     () => I.clock(30),
+      };
     default:
       return {
         headline: t('track.unknownHeadline'),
@@ -717,6 +757,8 @@ function statusDocTitle(status: string, lang: 'th' | 'en'): string {
     preparing:        'track.preparingHeadline',
     ready:            'track.readyHeadline',
     completed:        'track.completedHeadline',
+    cancelled:        'track.cancelledHeadline',
+    expired:          'track.expiredHeadline',
   };
   const key = map[status];
   if (!key) return d['track.title'] as string;

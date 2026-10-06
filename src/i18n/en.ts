@@ -271,4 +271,16 @@ export const EN: Dict = {
 
   // ── Menu preorder banner ───────────────────────────────────
   'menu.preorderBanner': (time: string) => `Pre-orders open · we open at ${time}`,
+
+  // ── Privacy ───────────────────────────────────────────────
+  'privacy.title':   'Privacy',
+  'privacy.p1':      'We collect what we need to take and prepare your order: your name for pickup, phone number and what you ordered.',
+  'privacy.p2':      'We collect anonymous usage data, such as pages opened and items viewed, to improve our menu and make ordering easier. It is linked to your phone number only when you place an order.',
+  'privacy.p3':      'We do not sell your data and we do not store card details (payments are handled by our payment provider).',
+  'privacy.p4':      'You can ask to see, correct or delete your data by contacting us below.',
+  'privacy.contact': 'Contact',
+  'privacy.banner':  'We collect anonymous usage data to improve our service.',
+  'privacy.ack':     'Got it',
+  'privacy.details': 'Details',
+  'privacy.link':    'Privacy',
 };

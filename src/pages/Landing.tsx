@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useT } from '../i18n';
 import { Brand } from '../components/Brand';
 import { TabBar } from '../components/TabBar';
@@ -247,6 +247,11 @@ export default function Landing() {
         <span style={{ fontSize: 11, color: 'var(--ink-3)', letterSpacing: '.06em' }}>
           BEST PART BOWLS · {lang === 'en' ? SHOP.branchNameEn : SHOP.branchName}
         </span>
+        <div style={{ marginTop: 6 }}>
+          <Link to="/privacy" style={{ fontSize: 10, color: 'var(--ink-3)', textDecoration: 'none' }}>
+            {t('privacy.link')}
+          </Link>
+        </div>
       </div>
 
       <TabBar active="home" />

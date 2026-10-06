@@ -12,6 +12,7 @@ import { ProductSheet } from '../components/menu/ProductSheet';
 import { FEATURED_KEYWORD } from '../config/featured';
 import { useT } from '../i18n';
 import { useMenuState, useShopStatusServer } from '../lib/menuState';
+import { track, trackOnce } from '../lib/analytics';
 
 /* ── Types ───────────────────────────────────────────────── */
 type Category = {
@@ -81,6 +82,15 @@ const CARD_BORDER = '1px solid rgba(255,255,255,0.56)';
 const CARD_SHADOW = '0 2px 12px -4px rgba(120,86,32,0.14), 0 8px 28px -10px rgba(120,86,32,0.10), inset 0 1px 0 rgba(255,255,255,0.60)';
 const GLOW_BG     = 'radial-gradient(circle at 50% 46%, rgba(255,215,120,0.36) 0%, rgba(251,243,227,0) 66%)';
 
+/* ── Analytics helper ────────────────────────────────────── */
+function TrackUnavail({ itemId }: { itemId: string }) {
+  useEffect(() => {
+    trackOnce(`unavail_${itemId}`, 'item_unavailable_viewed', { item_id: itemId });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemId]);
+  return null;
+}
+
 /* ══════════════════════════════════════════════════════════
    ORDER PAGE — Chagee layout · hero+grid cards
 ══════════════════════════════════════════════════════════ */
@@ -91,6 +101,8 @@ export default function Order() {
   const { t, lang } = useT();
 
   const menuSt = useMenuState();
+
+  const menuViewedRef = useRef(false);
 
   const method = searchParams.get('method') ?? 'dine-in';
   const itemId = searchParams.get('item');
@@ -188,6 +200,14 @@ export default function Order() {
       });
   }, [retryKey]);
 
+  /* menu_viewed — once per page load, after items load */
+  useEffect(() => {
+    if (loadingItems || fetchError || menuViewedRef.current) return;
+    menuViewedRef.current = true;
+    track('menu_viewed');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadingItems, fetchError]);
+
   /* Log which DB categories are hidden as duplicates */
   useEffect(() => {
     if (cats.length === 0) return;
@@ -248,6 +268,7 @@ export default function Order() {
 
   /* ── Handlers ────────────────────────────────────────── */
   function handleCatClick(catId: string) {
+    track('category_viewed', { category_id: catId });
     setActiveCat(catId);
     scrollLocked.current = true;
     const el        = sectionRefs.current.get(catId);
@@ -524,7 +545,7 @@ export default function Order() {
                         animate={{ opacity: heroUnavail ? 0.45 : 1, y: 0 }}
                         transition={{ delay: catDelay, duration: 0.24, ease: 'easeOut' }}
                         whileTap={prefersReduced || heroUnavail ? undefined : { scale: 0.98 }}
-                        onClick={heroUnavail ? undefined : () => openItem(heroItem.id)}
+                        onClick={heroUnavail ? () => track('item_unavailable_attempted', { item_id: heroItem.id }) : () => openItem(heroItem.id)}
                         style={{
                           marginBottom: 8,
                           borderRadius: 18,
@@ -576,6 +597,7 @@ export default function Order() {
                           display: 'flex', flexDirection: 'column',
                         }}>
                           {/* Badge: unavailable or แนะนำ */}
+                          {heroUnavail && <TrackUnavail itemId={heroItem.id} />}
                           <span style={{
                             alignSelf: 'flex-start', marginBottom: 4,
                             fontSize: 9, fontWeight: 700, letterSpacing: '.04em',
@@ -642,7 +664,7 @@ export default function Order() {
                             animate={{ opacity: itUnavail ? 0.45 : 1, y: 0 }}
                             transition={{ delay, duration: 0.22, ease: 'easeOut' }}
                             whileTap={prefersReduced || itUnavail ? undefined : { scale: 0.96 }}
-                            onClick={itUnavail ? undefined : () => openItem(it.id)}
+                            onClick={itUnavail ? () => track('item_unavailable_attempted', { item_id: it.id }) : () => openItem(it.id)}
                             style={{
                               borderRadius: 14,
                               background: CARD_BG,
@@ -667,6 +689,7 @@ export default function Order() {
                                   background: 'var(--accent)', color: '#fff',
                                 }}>BEST</span>
                               )}
+                              {itUnavail && <TrackUnavail itemId={it.id} />}
                               {itUnavail && (
                                 <div style={{
                                   position: 'absolute', top: 5, left: 5, zIndex: 2,

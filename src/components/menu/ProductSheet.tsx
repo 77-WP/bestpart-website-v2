@@ -9,6 +9,7 @@ import { useT } from '../../i18n';
 import { PERSONALIZATION } from '../../config/personalization';
 import { TEST_MODE } from '../../config/env';
 import { useMenuState } from '../../lib/menuState';
+import { track } from '../../lib/analytics';
 
 /* ── DB types ─────────────────────────────────────────────── */
 type MenuItemRow = {
@@ -209,6 +210,14 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemId, editCartId]);
 
+  /* item_viewed */
+  useEffect(() => {
+    if (phase === 'ready' && item) {
+      track('item_viewed', { item_id: item.id });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, item?.id]);
+
   /* ── Derived group lists ─────────────────────────────────── */
   const visibleGroups = useMemo(() => groups.filter(g => !isHiddenGroup(g)), [groups]);
 
@@ -282,6 +291,7 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
   }
 
   function handleSelect(groupId: string, optionId: string, type: 'SINGLE_SELECT' | 'MULTI_SELECT') {
+    if (item) track('item_customized', { item_id: item.id, option_id: optionId });
     setSelections(prev => {
       const next = { ...prev };
       if (type === 'SINGLE_SELECT') {
@@ -297,6 +307,7 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
 
   /* Egg doneness — exclusive within group, tap same to deselect */
   function handleEggDoneness(opt: RichOption) {
+    if (item) track('item_customized', { item_id: item.id, option_id: opt.id });
     setSelections(prev => {
       const next = { ...prev };
       const cur  = next[opt.groupId] ?? [];
@@ -396,11 +407,19 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
       setTimeout(() => setClosedTapMsg(false), 3000);
       return;
     }
+    const cartItem = buildCartItem();
     if (editCartId) {
-      replace(editCartId, buildCartItem());
+      replace(editCartId, cartItem);
     } else {
-      add(buildCartItem());
+      add(cartItem);
     }
+    track('item_added_to_cart', {
+      item_id:    cartItem.itemId,
+      qty:        cartItem.qty,
+      option_ids: cartItem.optionIds,
+      unit_price: unitPrice,
+      source:     editCartId ? 'edit' : 'sheet',
+    });
     close();
   }
 

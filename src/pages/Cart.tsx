@@ -9,6 +9,7 @@ import { ProductSheet } from '../components/menu/ProductSheet';
 import { useT } from '../i18n';
 import { supabase } from '../lib/supabase';
 import { useMenuState, getCartIssues, cartHasBlocking, isItemUnavailable, useShopStatusServer } from '../lib/menuState';
+import { track } from '../lib/analytics';
 
 /* ── Drinks ──────────────────────────────────────────────── */
 const DRINKS_CAT_NAME_TH = 'เครื่องดื่ม';
@@ -61,6 +62,14 @@ export default function Cart() {
   const isDineIn = method === 'dine-in';
   const total    = cartTotal(items);
 
+  useEffect(() => {
+    track('cart_viewed', {
+      item_count: items.reduce((s, i) => s + i.qty, 0),
+      subtotal:   cartTotal(items),
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useMenuState(); // subscribe to availability polling (re-renders on each poll)
   const issues  = getCartIssues(items);
   const blocked = cartHasBlocking(items);
@@ -99,6 +108,7 @@ export default function Cart() {
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function removeWithUndo(it: CartItem) {
+    track('item_removed_from_cart', { item_id: it.itemId, qty: it.qty });
     if (undoTimer.current) clearTimeout(undoTimer.current);
     setUndoItem(it);
     remove(it.cartId);
@@ -120,6 +130,13 @@ export default function Cart() {
     items.filter(it => it.itemId === id).reduce((s, it) => s + it.qty, 0);
 
   function addDrink(drink: DrinkItem) {
+    track('item_added_to_cart', {
+      item_id:    drink.id,
+      qty:        1,
+      option_ids: [],
+      unit_price: drink.base_price,
+      source:     'drink_rail',
+    });
     const existing = items.find(it => it.itemId === drink.id && it.isDrink);
     if (existing) { setQty(existing.cartId, existing.qty + 1); return; }
     add({

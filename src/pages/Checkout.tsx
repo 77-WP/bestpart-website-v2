@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useCart, cartTotal, itemTotal } from '../store/cart';
 import { useT } from '../i18n';
 import { supabase, readFnError } from '../lib/supabase';
@@ -8,6 +8,7 @@ import { SHOP, shopCloseLabel, computeShopStatus, roundUp5, minToHHMM } from '..
 import { TEST_MODE, ENABLE_BEAM, CURBSIDE_PROMPTPAY_ONLY } from '../config/env';
 import { LINKS } from '../config/links';
 import { saveLocalOrder } from '../lib/localOrders';
+import { track, getAnonymousId, getSessionId, getAcquisitionTag } from '../lib/analytics';
 import {
   useShopStatusServer,
   getShop,
@@ -237,6 +238,16 @@ export default function Checkout() {
     ? shopInfo.slots.find(s => s.isAsap) ?? null
     : shopInfo.slots.find(s => s.value === selSlot) ?? null;
 
+  /* checkout_started */
+  useEffect(() => {
+    track('checkout_started', {
+      item_count: itemCount,
+      subtotal:   total,
+      ...(method ? { fulfillment_type: method } : {}),
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   /* ── Submit ──────────────────────────────────────────────  */
   const IDEM_KEY = 'bp_idem_key';
 
@@ -330,6 +341,7 @@ export default function Checkout() {
         }
       : undefined;
 
+    const campaign = getAcquisitionTag();
     const body = {
       idempotency_key:  idempotencyKey,
       fulfillment_type: FULFILLMENT_MAP[method] ?? 'takeaway',
@@ -347,9 +359,14 @@ export default function Checkout() {
         qty:        it.qty,
         option_ids: it.optionIds,
       })),
+      anonymous_id: getAnonymousId(),
+      session_id:   getSessionId(),
+      ...(campaign ? { campaign } : {}),
     };
 
     if (TEST_MODE) console.log('[create-order] payload:', body);
+
+    track('payment_started', { method: isBeam ? 'promptpay' : 'cash', total });
 
     const { data, error: fnError } = await supabase.functions.invoke('create-order', { body });
 
@@ -357,6 +374,7 @@ export default function Checkout() {
 
     if (fnError || !result?.order_id) {
       const { code } = fnError ? await readFnError(fnError) : { code: 'fallback' };
+      track('payment_failed', { code });
       if (TEST_MODE) console.error('[create-order] failed, code:', code, fnError);
       setLoading(false);
       const errorMsg = (() => {
@@ -865,7 +883,7 @@ export default function Checkout() {
           .map(p => (
           <label
             key={p.id}
-            onClick={() => setPayment(p.id)}
+            onClick={() => { setPayment(p.id); track('payment_method_selected', { method: p.id }); }}
             style={{
               display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
               borderRadius: 'var(--r-sm)', marginBottom: 6, cursor: 'pointer',
@@ -993,6 +1011,11 @@ export default function Checkout() {
           </span>
           {!loading && <span>{I.arrow(14)}</span>}
         </button>
+        <div style={{ textAlign: 'center', marginTop: 8 }}>
+          <Link to="/privacy" style={{ fontSize: 10, color: 'var(--ink-3)', textDecoration: 'none' }}>
+            {t('privacy.link')}
+          </Link>
+        </div>
       </div>
     </div>
   );

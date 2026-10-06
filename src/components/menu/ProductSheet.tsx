@@ -9,6 +9,7 @@ import { useT } from '../../i18n';
 import { PERSONALIZATION } from '../../config/personalization';
 import { TEST_MODE } from '../../config/env';
 import { useMenuState, getOptionRules } from '../../lib/menuState';
+import { isOptionRuleHidden } from '../../lib/optionRules';
 import { track } from '../../lib/analytics';
 
 /* ── DB types ─────────────────────────────────────────────── */
@@ -280,16 +281,21 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item?.id, menuTick]);
 
+  const selectedOptionIds = useMemo(
+    () => Object.values(selections).flat(),
+    [selections],
+  );
+
   const ruleHiddenIds = useMemo<Set<string>>(() => {
+    if (!item) return new Set();
     const hidden = new Set<string>();
     for (const rule of optionRules) {
-      const condMet = rule.requires_any.some(reqId =>
-        Object.values(selections).some(sel => sel.includes(reqId)),
-      );
-      if (!condMet) hidden.add(rule.option_id);
+      if (isOptionRuleHidden(rule.option_id, selectedOptionIds, optionRules, item.category_id)) {
+        hidden.add(rule.option_id);
+      }
     }
     return hidden;
-  }, [optionRules, selections]);
+  }, [item, optionRules, selectedOptionIds]);
 
   /* Auto-deselect options that become hidden by rules */
   useEffect(() => {
@@ -320,6 +326,11 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
   const visibleEggOptions = useMemo(
     () => eggOptions.filter(o => !ruleHiddenIds.has(o.id)),
     [eggOptions, ruleHiddenIds],
+  );
+
+  const visibleTasteOptions = useMemo(
+    () => tasteOptions.filter(o => !ruleHiddenIds.has(o.id)),
+    [tasteOptions, ruleHiddenIds],
   );
 
   /* ── Price calculation ────────────────────────────────────── */
@@ -500,7 +511,7 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
     : '';
 
   const selectedPersonLabels = allPersonOptions
-    .filter(o => isSelected(o.groupId, o.id))
+    .filter(o => isSelected(o.groupId, o.id) && !ruleHiddenIds.has(o.id))
     .map(o => {
       const po = PERSONALIZATION[o.option_name_th.trim()];
       return lang === 'en'
@@ -510,7 +521,7 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
 
   const hasAnyPersonSelection = selectedPersonLabels.length > 0;
   const eggAllFree   = visibleEggOptions.every(o => o.price_adjustment === 0);
-  const tasteAllFree = tasteOptions.every(o => o.price_adjustment === 0);
+  const tasteAllFree = visibleTasteOptions.every(o => o.price_adjustment === 0);
 
   if (!itemId) return null;
 
@@ -703,7 +714,7 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                           {/* Spice: 5-column grid, equal cells, no wrap */}
                           {isSpice ? (
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
-                              {displayOpts.map(opt => {
+                              {displayOpts.filter(opt => !ruleHiddenIds.has(opt.id)).map(opt => {
                                 const sel    = selectedIds.includes(opt.id);
                                 const optOut = isOptionUnavailable(opt.id);
                                 const idx    = spiceIndex(opt.option_name_th);
@@ -752,7 +763,7 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                           ) : (
                             /* Size / other mandatory single: pill row */
                             <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
-                              {displayOpts.map(opt => {
+                              {displayOpts.filter(opt => !ruleHiddenIds.has(opt.id)).map(opt => {
                                 const sel    = selectedIds.includes(opt.id);
                                 const optOut = isOptionUnavailable(opt.id);
                                 const label  = lang === 'en'
@@ -943,8 +954,16 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                 </AnimatePresence>
 
                 {/* 3) Group B — รสชาติในแบบคุณ */}
-                {tasteOptions.length > 0 && (
-                  <div style={{ marginBottom: 28 }}>
+                <AnimatePresence>
+                {visibleTasteOptions.length > 0 && (
+                  <motion.div
+                    key="taste-group"
+                    initial={prefersReduced ? false : { opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={prefersReduced ? undefined : { opacity: 0, height: 0 }}
+                    transition={{ duration: 0.18, ease: 'easeOut' }}
+                    style={{ overflow: 'hidden', marginBottom: 28 }}
+                  >
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
                       <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{t('detail.tasteTitle')}</span>
                       {tasteAllFree && (
@@ -952,7 +971,7 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                       )}
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {tasteOptions.map(opt => {
+                      {visibleTasteOptions.map(opt => {
                         const sel    = isSelected(opt.groupId, opt.id);
                         const optOut = isOptionUnavailable(opt.id);
                         const po     = PERSONALIZATION[opt.option_name_th.trim()];
@@ -989,11 +1008,12 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                         );
                       })}
                     </div>
-                  </div>
+                  </motion.div>
                 )}
+                </AnimatePresence>
 
                 {/* 4) เพิ่มเติมให้มื้อนี้ — single heading, flat chip list, no sub-group labels */}
-                {extrasGroups.length > 0 && (
+                {extrasGroups.some(g => g.options.some(opt => !ruleHiddenIds.has(opt.id))) && (
                   <div style={{ marginTop: 8 }}>
                     <div style={{ height: 1, background: 'var(--line)', marginBottom: 16 }} />
                     <div style={{
@@ -1002,7 +1022,7 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                     }}>{t('detail.extrasTitle')}</div>
                     <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
                       {extrasGroups.flatMap(g =>
-                        g.options.map(opt => {
+                        g.options.filter(opt => !ruleHiddenIds.has(opt.id)).map(opt => {
                           const sel    = (selections[g.id] ?? []).includes(opt.id);
                           const optOut = isOptionUnavailable(opt.id);
                           const label  = lang === 'en'

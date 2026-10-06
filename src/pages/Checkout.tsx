@@ -223,6 +223,8 @@ export default function Checkout() {
   const timeRef    = useRef<HTMLDivElement>(null);
   const nameRef    = useRef<HTMLInputElement>(null);
   const phoneRef   = useRef<HTMLInputElement>(null);
+  const barRef          = useRef<HTMLDivElement>(null);
+  const summaryContentRef = useRef<HTMLDivElement>(null);
 
   /* ── Computed ────────────────────────────────────────────  */
   const subtotal   = cartTotal(items);
@@ -238,6 +240,29 @@ export default function Checkout() {
   const selectedSlotObj = selSlot === null
     ? shopInfo.slots.find(s => s.isAsap) ?? null
     : shopInfo.slots.find(s => s.value === selSlot) ?? null;
+
+  /* ── Measure sticky bar → CSS variable ─────────────────── */
+  useEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      const entry = entries[0];
+      const h = entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
+      document.documentElement.style.setProperty('--checkout-bar-h', `${h}px`);
+    });
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      document.documentElement.style.removeProperty('--checkout-bar-h');
+    };
+  }, []);
+
+  /* ── Scroll summary into view when expanded ─────────────  */
+  useEffect(() => {
+    if (summaryOpen && summaryContentRef.current) {
+      summaryContentRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [summaryOpen]);
 
   /* checkout_started */
   useEffect(() => {
@@ -437,7 +462,7 @@ export default function Checkout() {
 
   /* ── Render ──────────────────────────────────────────────── */
   return (
-    <div className="page" style={{ paddingBottom: 120 }}>
+    <div className="page" style={{ paddingBottom: 'calc(var(--checkout-bar-h, 88px) + 24px + env(safe-area-inset-bottom, 0px))' }}>
 
       {/* TEST MODE banner */}
       {TEST_MODE && (
@@ -927,7 +952,7 @@ export default function Checkout() {
         </button>
 
         {summaryOpen && (
-          <div style={{
+          <div ref={summaryContentRef} style={{
             marginTop: 4, border: '1px solid var(--line)',
             borderTop: 'none', borderRadius: '0 0 var(--r-md) var(--r-md)',
             padding: '8px 14px',
@@ -956,7 +981,7 @@ export default function Checkout() {
       </div>
 
       {/* ── Sticky button ────────────────────────────────────── */}
-      <div style={{
+      <div ref={barRef} style={{
         position: 'fixed', left: '50%', transform: 'translateX(-50%)',
         bottom: 0, width: '100%', maxWidth: 480,
         padding: '12px 18px calc(env(safe-area-inset-bottom, 0px) + 18px)',

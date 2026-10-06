@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { motion, useReducedMotion } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { supabase } from '../../lib/supabase';
 import { Bowl } from '../Bowl';
 import { I } from '../icons';
@@ -835,8 +835,16 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                 </div>
 
                 {/* 2) Group A — ไข่ดาวที่คุณชอบ (hidden until egg add-on selected) */}
+                <AnimatePresence>
                 {visibleEggOptions.length > 0 && (
-                  <div style={{ marginBottom: 28 }}>
+                  <motion.div
+                    key="egg-group"
+                    initial={prefersReduced ? false : { opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={prefersReduced ? undefined : { opacity: 0, height: 0 }}
+                    transition={{ duration: 0.18, ease: 'easeOut' }}
+                    style={{ overflow: 'hidden', marginBottom: 28 }}
+                  >
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
                       <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{t('detail.eggTitle')}</span>
                       {eggAllFree && (
@@ -930,8 +938,9 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                         })}
                       </div>
                     )}
-                  </div>
+                  </motion.div>
                 )}
+                </AnimatePresence>
 
                 {/* 3) Group B — รสชาติในแบบคุณ */}
                 {tasteOptions.length > 0 && (

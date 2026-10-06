@@ -105,7 +105,8 @@ export default function Cart() {
 
   /* Undo */
   const [undoItem, setUndoItem] = useState<CartItem | null>(null);
-  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const undoTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cartBarRef = useRef<HTMLDivElement>(null);
 
   function removeWithUndo(it: CartItem) {
     track('item_removed_from_cart', { item_id: it.itemId, qty: it.qty });
@@ -121,6 +122,22 @@ export default function Cart() {
     setUndoItem(null);
   }
   useEffect(() => () => { if (undoTimer.current) clearTimeout(undoTimer.current); }, []);
+
+  /* ── Measure sticky bar → CSS variable ─────────────────── */
+  useEffect(() => {
+    const el = cartBarRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      const entry = entries[0];
+      const h = entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
+      document.documentElement.style.setProperty('--cart-bar-h', `${h}px`);
+    });
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      document.documentElement.style.removeProperty('--cart-bar-h');
+    };
+  }, []);
 
   /* Clear confirmation */
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -210,7 +227,7 @@ export default function Cart() {
 
   /* ── FULL CART ───────────────────────────────────────────── */
   return (
-    <div className="page" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 140px)' }}>
+    <div className="page" style={{ paddingBottom: 'calc(var(--cart-bar-h, 86px) + 24px + env(safe-area-inset-bottom, 0px))' }}>
 
       {/* Header */}
       <motion.div
@@ -584,7 +601,7 @@ export default function Cart() {
       </div>
 
       {/* Sticky checkout button */}
-      <div style={{
+      <div ref={cartBarRef} style={{
         position: 'fixed', left: '50%', transform: 'translateX(-50%)',
         bottom: 0, width: '100%', maxWidth: 480,
         padding: `14px 18px calc(env(safe-area-inset-bottom, 0px) + 14px)`,

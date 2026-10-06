@@ -21,8 +21,8 @@ export const EN: Dict = {
   'home.info.social':        'Social',
   'home.info.reviews':       'Reviews',
   'home.sheet.about.kicker': 'About',
-  'home.sheet.about.title':  'Best Part Bowls',
-  'home.sheet.about.body':   (branch: string) => `We're a Thai bowl restaurant serving bold single-dish meals, cooked fresh every order, with hand-selected ingredients daily.\n${branch} Open daily 11:00–22:00`,
+  'home.sheet.about.title':  "YOU'RE THE BEST PART.",
+  'home.sheet.about.body':   "We believe the way you like to eat deserves respect.\nThat's why we make every meal around you —\nyour taste, your preferences, your way.\nTo us, care means making food that feels truly yours.",
   'home.sheet.delivery.kicker': 'Delivery',
   'home.sheet.delivery.title':  'Choose a platform',
   'home.sheet.social.kicker':   'Follow us',
@@ -255,6 +255,10 @@ export const EN: Dict = {
   'orders.status.ready':      'Ready',
   'orders.status.completed':  'Collected',
 
+  // ── Contact / Help ────────────────────────────────────────
+  'contact.help':   'Contact us / Report a problem',
+  'contact.urgent': "Can't pay or something's wrong? Message us on LINE right away.",
+
   // ── Order errors (create-order) ───────────────────────────
   'order.error.shop_closed':         "We're not taking orders right now.",
   'order.error.too_late':            'Orders are closed for today.',
@@ -264,6 +268,7 @@ export const EN: Dict = {
   'order.error.invalid_pickup_time': "That pickup time isn't available. Please choose another.",
   'order.error.invalid_phone':       "That phone number doesn't look right.",
   'order.error.rate_limited':        'Too many attempts. Please wait a moment and try again.',
+  'order.error.option_requires_missing': 'Please add an egg first.',
   'order.error.fallback':            "We couldn't place your order. Please try again.",
 
   // ── Shop status ───────────────────────────────────────────

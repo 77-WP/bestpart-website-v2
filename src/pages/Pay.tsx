@@ -5,6 +5,7 @@ import { useT } from '../i18n';
 import type { GetOrderResult } from '../lib/supabase';
 import { I } from '../components/icons';
 import { TEST_MODE } from '../config/env';
+import { HelpLink } from '../components/HelpLink';
 
 type QrState =
   | { phase: 'loading' }
@@ -385,6 +386,7 @@ export default function Pay() {
           <div style={{ fontSize: 10, color: 'var(--ink-3)', marginBottom: 8 }}>
             {t('pay.waitingMsg')}
           </div>
+          <HelpLink variant="urgent" />
         </div>
       )}
 

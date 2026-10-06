@@ -28,6 +28,12 @@ export type PaymentChannel = {
   name: string;
 };
 
+export type OptionRule = {
+  category_id: string;
+  option_id: string;
+  requires_any: string[];
+};
+
 type MenuStateData = {
   server_time: string;
   shop: ShopData;
@@ -36,6 +42,7 @@ type MenuStateData = {
   payment_channels: PaymentChannel[];
   items: ItemState[];
   options: OptionState[];
+  option_rules?: OptionRule[];
 };
 
 type InternalState = {
@@ -145,6 +152,10 @@ export function getPaymentChannels(): PaymentChannel[] {
 
 export function getPrepMinutes(): number {
   return _state.data?.prep_minutes ?? SHOP.prepMinutes;
+}
+
+export function getOptionRules(): OptionRule[] {
+  return _state.data?.option_rules ?? [];
 }
 
 export async function refreshMenuState(): Promise<void> {

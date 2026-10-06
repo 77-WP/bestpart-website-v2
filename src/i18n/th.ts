@@ -24,8 +24,8 @@ export const TH = {
   'home.info.social':        'Social',
   'home.info.reviews':       'รีวิว',
   'home.sheet.about.kicker': 'เกี่ยวกับเรา',
-  'home.sheet.about.title':  'Best Part Bowls',
-  'home.sheet.about.body':   (branch: string) => `เราคือร้านอาหารไทยสไตล์โบลว์ เสิร์ฟเมนูจานเดี่ยวรสจัดจ้าน ที่ปรุงสดทุกออเดอร์ ส่วนผสมคัดเองทุกวัน\n${branch} เปิดทุกวัน 11:00–22:00`,
+  'home.sheet.about.title':  "YOU'RE THE BEST PART.",
+  'home.sheet.about.body':   "We believe the way you like to eat deserves respect.\nThat's why we make every meal around you —\nyour taste, your preferences, your way.\nTo us, care means making food that feels truly yours.",
   'home.sheet.delivery.kicker': 'เดลิเวอรี่',
   'home.sheet.delivery.title':  'เลือกแพลตฟอร์ม',
   'home.sheet.social.kicker':   'ติดตามเรา',
@@ -95,7 +95,7 @@ export const TH = {
   'cart.cutleryChip':         'รับช้อนส้อม',
   'cart.condimentsChip':      'รับพริกน้ำปลา',
   'cart.kitchenNoteTitle':    'ฝากถึงครัว',
-  'cart.kitchenNotePlaceholder': 'เช่น ใบกะเพราน้อย ๆ / ข้าวน้อยลงจากเดิม / เผ็ดแบบเด็กทาน',
+  'cart.kitchenNotePlaceholder': 'เช่น ใบกะเพราน้อย ๆ / ข้าวน้อยลงจากเดิม',
   'cart.kitchenNoteHelper': 'มีอะไรที่ตัวเลือกด้านบนยังไม่ครอบคลุม บอกเราได้เลย',
   'cart.kitchenNoteSmall':  'ไม่ต้องพิมพ์ซ้ำสิ่งที่เลือกไว้ด้านบน',
   'cart.itemUnavailable':   'เมนูนี้หมดชั่วคราว ลบออกเพื่อสั่งต่อ',
@@ -258,6 +258,10 @@ export const TH = {
   'orders.status.ready':      'พร้อมรับแล้ว',
   'orders.status.completed':  'รับแล้ว',
 
+  // ── Contact / Help ────────────────────────────────────────
+  'contact.help':   'ติดต่อเรา / แจ้งปัญหา',
+  'contact.urgent': 'จ่ายเงินไม่ได้ หรือเว็บมีปัญหา? แจ้งเราทาง LINE ได้ทันที',
+
   // ── Order errors (create-order) ───────────────────────────
   'order.error.shop_closed':         'ตอนนี้ร้านยังไม่เปิดรับออเดอร์ครับ',
   'order.error.too_late':            'ปิดรับออเดอร์ช่วงนี้แล้วครับ',
@@ -267,6 +271,7 @@ export const TH = {
   'order.error.invalid_pickup_time': 'เวลารับที่เลือกไม่ถูกต้อง กรุณาเลือกใหม่ครับ',
   'order.error.invalid_phone':       'เบอร์โทรไม่ถูกต้องครับ',
   'order.error.rate_limited':        'ทำรายการถี่เกินไป กรุณารอสักครู่แล้วลองใหม่ครับ',
+  'order.error.option_requires_missing': 'กรุณาเลือกไข่ที่ต้องการเพิ่มก่อน',
   'order.error.fallback':            'ส่งออเดอร์ไม่สำเร็จ กรุณาลองใหม่อีกครั้งครับ',
 
   // ── Shop status ───────────────────────────────────────────

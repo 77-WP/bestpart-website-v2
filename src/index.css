@@ -45,6 +45,13 @@ body {
 
 button { font-family: inherit; cursor: pointer; }
 
+/* Prevent iOS Safari auto-zoom on focus (requires computed font-size ≥ 16px) */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+textarea,
+select {
+  font-size: 16px;
+}
+
 .kicker {
   font-family: var(--sans);
   font-weight: 700;

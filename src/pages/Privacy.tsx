@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useT } from '../i18n';
 import { I } from '../components/icons';
-import { PRIVACY_CONTACT } from '../config/privacy';
+import { PRIVACY_CONTACT, PRIVACY_CONTACT_URL } from '../config/privacy';
 
 export default function Privacy() {
   const navigate = useNavigate();
@@ -37,7 +37,15 @@ export default function Privacy() {
         </p>
         {PRIVACY_CONTACT && (
           <p style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.6, marginTop: 24, marginBottom: 0 }}>
-            {t('privacy.contact')}: {PRIVACY_CONTACT}
+            {t('privacy.contact')}:{' '}
+            <a
+              href={PRIVACY_CONTACT_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: 'var(--ink-2)', textDecoration: 'underline' }}
+            >
+              {PRIVACY_CONTACT}
+            </a>
           </p>
         )}
       </div>

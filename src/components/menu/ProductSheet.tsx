@@ -8,7 +8,7 @@ import { useCart, type CartItem } from '../../store/cart';
 import { useT } from '../../i18n';
 import { PERSONALIZATION } from '../../config/personalization';
 import { TEST_MODE } from '../../config/env';
-import { useMenuState } from '../../lib/menuState';
+import { useMenuState, getOptionRules } from '../../lib/menuState';
 import { track } from '../../lib/analytics';
 
 /* ── DB types ─────────────────────────────────────────────── */
@@ -273,15 +273,65 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
     [allPersonOptions],
   );
 
+  /* ── Option rules (server-driven conditional visibility) ───── */
+  const optionRules = useMemo(() => {
+    if (!item) return [];
+    return getOptionRules().filter(r => r.category_id === item.category_id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item?.id, menuTick]);
+
+  const ruleHiddenIds = useMemo<Set<string>>(() => {
+    const hidden = new Set<string>();
+    for (const rule of optionRules) {
+      const condMet = rule.requires_any.some(reqId =>
+        Object.values(selections).some(sel => sel.includes(reqId)),
+      );
+      if (!condMet) hidden.add(rule.option_id);
+    }
+    return hidden;
+  }, [optionRules, selections]);
+
+  /* Auto-deselect options that become hidden by rules */
+  useEffect(() => {
+    if (ruleHiddenIds.size === 0) return;
+    setSelections(prev => {
+      let changed = false;
+      const next = { ...prev };
+      for (const [gId, optIds] of Object.entries(prev)) {
+        const filtered = optIds.filter(id => !ruleHiddenIds.has(id));
+        if (filtered.length !== optIds.length) {
+          next[gId] = filtered;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ruleHiddenIds]);
+
+  const visibleEggDoneness = useMemo(
+    () => eggDoneness.filter(o => !ruleHiddenIds.has(o.id)),
+    [eggDoneness, ruleHiddenIds],
+  );
+  const visibleEggAdditive = useMemo(
+    () => eggAdditive.filter(o => !ruleHiddenIds.has(o.id)),
+    [eggAdditive, ruleHiddenIds],
+  );
+  const visibleEggOptions = useMemo(
+    () => eggOptions.filter(o => !ruleHiddenIds.has(o.id)),
+    [eggOptions, ruleHiddenIds],
+  );
+
   /* ── Price calculation ────────────────────────────────────── */
   const unitPrice = useMemo(() => {
     if (!item) return 0;
     return item.base_price + groups.reduce((t, g) => {
       return t + (selections[g.id] ?? []).reduce((s, optId) => {
+        if (ruleHiddenIds.has(optId)) return s;
         return s + (g.options.find(o => o.id === optId)?.price_adjustment ?? 0);
       }, 0);
     }, 0);
-  }, [item, groups, selections]);
+  }, [item, groups, selections, ruleHiddenIds]);
 
   const total = unitPrice * qty;
 
@@ -342,6 +392,7 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
       if (isHiddenGroup(g)) continue;
       if (g.id === sizeGroup?.id || g.id === spiceGroup?.id) continue;
       for (const optId of selections[g.id] ?? []) {
+        if (ruleHiddenIds.has(optId)) continue;
         const opt = g.options.find(o => o.id === optId);
         if (opt) {
           addons.push({ label: opt.option_name_th, price: opt.price_adjustment });
@@ -458,7 +509,7 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
     });
 
   const hasAnyPersonSelection = selectedPersonLabels.length > 0;
-  const eggAllFree   = eggOptions.every(o => o.price_adjustment === 0);
+  const eggAllFree   = visibleEggOptions.every(o => o.price_adjustment === 0);
   const tasteAllFree = tasteOptions.every(o => o.price_adjustment === 0);
 
   if (!itemId) return null;
@@ -783,8 +834,8 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                   </em>
                 </div>
 
-                {/* 2) Group A — ไข่ดาวที่คุณชอบ */}
-                {eggOptions.length > 0 && (
+                {/* 2) Group A — ไข่ดาวที่คุณชอบ (hidden until egg add-on selected) */}
+                {visibleEggOptions.length > 0 && (
                   <div style={{ marginBottom: 28 }}>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
                       <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{t('detail.eggTitle')}</span>
@@ -794,12 +845,12 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                     </div>
 
                     {/* Doneness — exclusive, tap same to deselect */}
-                    {eggDoneness.length > 0 && (
+                    {visibleEggDoneness.length > 0 && (
                       <div style={{
                         display: 'flex', gap: 6, flexWrap: 'wrap',
-                        marginBottom: eggAdditive.length > 0 ? 8 : 0,
+                        marginBottom: visibleEggAdditive.length > 0 ? 8 : 0,
                       }}>
-                        {eggDoneness.map(opt => {
+                        {visibleEggDoneness.map(opt => {
                           const sel    = isSelected(opt.groupId, opt.id);
                           const optOut = isOptionUnavailable(opt.id);
                           const po     = PERSONALIZATION[opt.option_name_th.trim()];
@@ -839,9 +890,9 @@ export function ProductSheet({ isShopOpen, shopClosedMsg }: Props) {
                     )}
 
                     {/* Additive egg chips — multi-select */}
-                    {eggAdditive.length > 0 && (
+                    {visibleEggAdditive.length > 0 && (
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        {eggAdditive.map(opt => {
+                        {visibleEggAdditive.map(opt => {
                           const sel    = isSelected(opt.groupId, opt.id);
                           const optOut = isOptionUnavailable(opt.id);
                           const po     = PERSONALIZATION[opt.option_name_th.trim()];

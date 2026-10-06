@@ -541,7 +541,7 @@ export default function Cart() {
                 width: '100%', resize: 'none', boxSizing: 'border-box',
                 background: 'var(--bg-2)', border: '1px solid var(--line)',
                 borderRadius: 'var(--r-sm)', padding: '10px 12px',
-                fontSize: 13, fontFamily: 'var(--sans)', color: 'var(--ink)',
+                fontSize: 16, fontFamily: 'var(--sans)', color: 'var(--ink)',
                 outline: 'none', lineHeight: 1.55,
                 paddingBottom: 22, /* room for counter */
               }}

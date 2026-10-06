@@ -16,6 +16,7 @@ import {
   refreshMenuState,
   cartHasBlocking,
 } from '../lib/menuState';
+import { HelpLink } from '../components/HelpLink';
 
 /* ── Constants ───────────────────────────────────────────── */
 const METHODS = [
@@ -66,7 +67,7 @@ const inputBase: React.CSSProperties = {
   borderRadius: 'var(--r-sm)',
   padding: '12px 14px',
   fontFamily: 'var(--sans)',
-  fontSize: 14,
+  fontSize: 16,
   color: 'var(--ink)',
   outline: 'none',
 };
@@ -382,8 +383,9 @@ export default function Checkout() {
           case 'shop_closed':         return t('order.error.shop_closed');
           case 'too_late':            return t('order.error.too_late');
           case 'item_unavailable':    return t('order.error.item_unavailable');
-          case 'option_unavailable':  return t('order.error.option_unavailable');
-          case 'price_changed':       return t('order.error.price_changed');
+          case 'option_unavailable':        return t('order.error.option_unavailable');
+          case 'option_requires_missing':   return t('order.error.option_requires_missing');
+          case 'price_changed':             return t('order.error.price_changed');
           case 'invalid_pickup_time': return t('order.error.invalid_pickup_time');
           case 'invalid_phone':       return t('order.error.invalid_phone');
           case 'rate_limited':        return t('order.error.rate_limited');
@@ -553,7 +555,7 @@ export default function Checkout() {
                   width: '100%', background: 'var(--bg-2)',
                   border: submitHint === t('checkout.validVehicleColorOther') ? '1.5px solid var(--accent)' : '1px solid var(--line)',
                   borderRadius: 'var(--r-sm)', padding: '8px 12px',
-                  fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink)', outline: 'none',
+                  fontFamily: 'var(--sans)', fontSize: 16, color: 'var(--ink)', outline: 'none',
                   boxSizing: 'border-box',
                 }}
               />
@@ -618,7 +620,7 @@ export default function Checkout() {
                   width: '100%', background: 'var(--bg-2)',
                   border: '1px solid var(--line)',
                   borderRadius: 'var(--r-sm)', padding: '8px 12px',
-                  fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink)', outline: 'none',
+                  fontFamily: 'var(--sans)', fontSize: 16, color: 'var(--ink)', outline: 'none',
                   boxSizing: 'border-box',
                 }}
               />
@@ -1011,10 +1013,11 @@ export default function Checkout() {
           </span>
           {!loading && <span>{I.arrow(14)}</span>}
         </button>
-        <div style={{ textAlign: 'center', marginTop: 8 }}>
+        <div style={{ textAlign: 'center', marginTop: 8, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16 }}>
           <Link to="/privacy" style={{ fontSize: 10, color: 'var(--ink-3)', textDecoration: 'none' }}>
             {t('privacy.link')}
           </Link>
+          <HelpLink variant="help" />
         </div>
       </div>
     </div>

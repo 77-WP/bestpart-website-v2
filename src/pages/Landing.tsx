@@ -110,16 +110,8 @@ export default function Landing() {
         padding: '16px 18px 14px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Brand size={34} />
-          <div>
-            <div style={{ fontFamily: 'var(--serif)', fontSize: 16, fontWeight: 600, lineHeight: 1.1 }}>
-              Best Part
-            </div>
-            <div style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '.1em', textTransform: 'uppercase' }}>
-              Bowls
-            </div>
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <Brand size={40} />
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -293,8 +285,8 @@ export default function Landing() {
           <div style={{ padding: '8px 18px 0' }}>
             <div className="kicker" style={{ marginBottom: 4 }}>{t('home.sheet.about.kicker')}</div>
             <div style={{ fontFamily: 'var(--serif)', fontSize: 18, marginBottom: 14 }}>{t('home.sheet.about.title')}</div>
-            <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.8 }}>
-              {t('home.sheet.about.body', lang === 'en' ? SHOP.branchNameEn : SHOP.branchName)}
+            <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.8, whiteSpace: 'pre-line' }}>
+              {t('home.sheet.about.body')}
             </div>
           </div>
         </BottomSheet>

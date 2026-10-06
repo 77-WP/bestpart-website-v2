@@ -9,6 +9,7 @@ import { TEST_MODE } from '../config/env';
 import { useT, DICT } from '../i18n';
 import type { Dict } from '../i18n';
 import { getLocalOrders } from '../lib/localOrders';
+import { HelpLink } from '../components/HelpLink';
 
 /* ── Bangkok time (UTC+7) — never uses system timezone ──────── */
 function toBkkHHMM(date: Date): string {
@@ -487,6 +488,11 @@ export default function Track() {
           {I.pin(16)}
           {t('track.directions')}
         </a>
+      </div>
+
+      {/* ── Help link ─────────────────────────────────────── */}
+      <div style={{ padding: '8px 18px 0', display: 'flex', justifyContent: 'center' }}>
+        <HelpLink variant="help" />
       </div>
 
       {/* ── Footer ────────────────────────────────────────── */}

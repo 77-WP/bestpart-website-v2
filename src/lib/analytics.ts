@@ -86,24 +86,83 @@ function currentLang(): 'th' | 'en' {
 }
 
 /* ── Attribution ─────────────────────────────────────────── */
-function readAttribution() {
-  const p = new URLSearchParams(location.search);
-  let referrerHost: string | undefined;
-  if (document.referrer) {
-    try { referrerHost = new URL(document.referrer).hostname; } catch { /* ignore */ }
-  }
+const LANDING_KEY = 'bp_landing';
+
+interface LandingData {
+  landing_page:   string;
+  referrer_host?: string;
+  utm_source?:    string;
+  utm_medium?:    string;
+  utm_campaign?:  string;
+  utm_content?:   string;
+  qr_source?:     string;
+}
+
+function isPiiLike(v: string): boolean {
+  if (/^[+\s()-]?[\d\s()-]{9,15}$/.test(v.trim())) return true;
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v))      return true;
+  return false;
+}
+
+function sanitizeUtm(v: string | null, maxLen: number): string | undefined {
+  if (!v) return undefined;
+  if (isPiiLike(v)) return undefined;
+  return v.slice(0, maxLen);
+}
+
+/** Pure function — testable without browser globals */
+export function captureLandingParams(
+  pathname: string,
+  search: string,
+  referrer: string,
+  existing: string | null,
+): LandingData | null {
+  if (existing !== null) return null; // first-touch wins, never overwrite in same tab
+  const p = new URLSearchParams(search);
+  const utm_source   = sanitizeUtm(p.get('utm_source'),           80);
+  const utm_medium   = sanitizeUtm(p.get('utm_medium'),           80);
+  const utm_campaign = sanitizeUtm(p.get('utm_campaign'),         80);
+  const utm_content  = sanitizeUtm(p.get('utm_content'),          80);
+  const qr_source    = sanitizeUtm(p.get('qr') ?? p.get('src'),   40);
+  let referrer_host: string | undefined;
+  if (referrer) { try { referrer_host = new URL(referrer).hostname; } catch { /* ignore */ } }
   return {
-    utm_source:   p.get('utm_source')   ?? undefined,
-    utm_medium:   p.get('utm_medium')   ?? undefined,
-    utm_campaign: p.get('utm_campaign') ?? undefined,
-    utm_content:  p.get('utm_content')  ?? undefined,
-    qr_source:    (p.get('qr') ?? p.get('src')) ?? undefined,
-    referrer:     referrerHost,
-    landing_page: location.pathname,
+    landing_page: pathname,
+    ...(referrer_host ? { referrer_host } : {}),
+    ...(utm_source    ? { utm_source }    : {}),
+    ...(utm_medium    ? { utm_medium }    : {}),
+    ...(utm_campaign  ? { utm_campaign }  : {}),
+    ...(utm_content   ? { utm_content }   : {}),
+    ...(qr_source     ? { qr_source }     : {}),
   };
 }
 
-function saveFirstTouch(attr: ReturnType<typeof readAttribution>): void {
+/* Runs at module-load time — before React/router render — captures UTM params */
+((): void => {
+  try {
+    const result = captureLandingParams(
+      location.pathname,
+      location.search,
+      document.referrer,
+      ssGet(LANDING_KEY),
+    );
+    if (result) ssSet(LANDING_KEY, JSON.stringify(result));
+  } catch { /* never throw */ }
+})();
+
+function getLanding(): LandingData {
+  try {
+    const raw = ssGet(LANDING_KEY);
+    if (raw) return JSON.parse(raw) as LandingData;
+  } catch { /* ignore */ }
+  return { landing_page: location.pathname };
+}
+
+function readAttribution(): LandingData {
+  return getLanding();
+}
+
+function saveFirstTouch(attr: LandingData): void {
   const hasVal = attr.utm_campaign || attr.qr_source || attr.utm_source;
   if (!hasVal) return;
   const raw = lsGet(FT_KEY);
@@ -226,7 +285,7 @@ export function initAnalytics(): void {
       if (attr.utm_campaign) ctx.utm_campaign = attr.utm_campaign;
       if (attr.utm_content)  ctx.utm_content  = attr.utm_content;
       if (attr.qr_source)    ctx.qr_source    = attr.qr_source;
-      if (attr.referrer)     ctx.referrer     = attr.referrer;
+      if (attr.referrer_host) ctx.referrer     = attr.referrer_host;
 
       const event: QEvent = {
         event_name:      'session_started',

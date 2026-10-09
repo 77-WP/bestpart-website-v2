@@ -24,7 +24,7 @@ type ShopData = {
 };
 
 export type PaymentChannel = {
-  key: 'promptpay_qr' | 'cash';
+  key: 'promptpay_qr' | 'cash' | 'thai_chuay_thai';
   name: string;
 };
 

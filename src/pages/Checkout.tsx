@@ -187,16 +187,17 @@ export default function Checkout() {
   /* ── Payment ─────────────────────────────────────────────  */
   const [payment, setPayment] = useState(ENABLE_BEAM ? 'promptpay' : 'cash');
 
-  /* Lock to PromptPay when curbside */
+  /* Lock to PromptPay when curbside (also when Thai Chuay Thai selected) */
   useEffect(() => {
-    if (isCurbside && CURBSIDE_PROMPTPAY_ONLY) setPayment('promptpay');
+    if (isCurbside && (CURBSIDE_PROMPTPAY_ONLY || payment === 'thai_chuay_thai')) setPayment('promptpay');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCurbside]);
 
   /* Server payment channels */
   const serverChannels    = getPaymentChannels();
   const channelKey        = serverChannels.map(c => c.key).join(',');
   const activePaymentIds: string[] = serverChannels.length > 0
-    ? serverChannels.map(c => c.key === 'promptpay_qr' ? 'promptpay' : 'cash')
+    ? serverChannels.map(c => c.key === 'promptpay_qr' ? 'promptpay' : c.key === 'thai_chuay_thai' ? 'thai_chuay_thai' : 'cash')
     : ['promptpay', 'cash'];
   const noPaymentChannels = serverChannels.length > 0 && activePaymentIds.length === 0;
 
@@ -355,6 +356,7 @@ export default function Checkout() {
     }
 
     const isBeam = payment === 'promptpay';
+    const paymentMethod = payment === 'promptpay' ? 'promptpay' : payment === 'thai_chuay_thai' ? 'thai_chuay_thai' : 'cash';
 
     const pickupTime = selSlot === null ? 'asap' : selSlot;
 
@@ -371,7 +373,7 @@ export default function Checkout() {
     const body = {
       idempotency_key:  idempotencyKey,
       fulfillment_type: FULFILLMENT_MAP[method] ?? 'takeaway',
-      payment_method:   isBeam ? 'promptpay' : 'cash',
+      payment_method:   paymentMethod,
       pickup_time:      pickupTime,
       name:             name.trim(),
       phone:            digitsOnly(phone),
@@ -392,7 +394,7 @@ export default function Checkout() {
 
     if (TEST_MODE) console.log('[create-order] payload:', body);
 
-    track('payment_started', { method: isBeam ? 'promptpay' : 'cash', total });
+    track('payment_started', { method: paymentMethod, total });
 
     const { data, error: fnError } = await supabase.functions.invoke('create-order', { body });
 
@@ -909,35 +911,50 @@ export default function Checkout() {
           </div>
         )}
         {[
-          { id: 'promptpay', label: t('checkout.promptpayLabel'), sub: t('checkout.promptpaySub'), icon: I.qr(16) },
-          { id: 'cash',      label: t('checkout.cashLabel'),      sub: t('checkout.cashSub'),      icon: I.cash(16) },
+          { id: 'promptpay',       label: t('checkout.promptpayLabel'),            sub: t('checkout.promptpaySub'),           icon: I.qr(16)   },
+          { id: 'cash',            label: t('checkout.cashLabel'),                  sub: t('checkout.cashSub'),                icon: I.cash(16) },
+          { id: 'thai_chuay_thai', label: t('checkout.pay.thaiChuayThai'),          sub: t('checkout.pay.thaiChuayThaiSub'),   icon: I.cash(16) },
         ]
           .filter(p => activePaymentIds.includes(p.id))
           .filter(p => ENABLE_BEAM || p.id !== 'promptpay')
           .filter(p => !(isCurbside && CURBSIDE_PROMPTPAY_ONLY && p.id === 'cash'))
-          .map(p => (
-          <label
-            key={p.id}
-            onClick={() => { setPayment(p.id); track('payment_method_selected', { method: p.id }); }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
-              borderRadius: 'var(--r-sm)', marginBottom: 6, cursor: 'pointer',
-              border: payment === p.id ? '1.5px solid var(--ink)' : '1px solid var(--line)',
-              background: payment === p.id ? 'var(--bg-2)' : 'var(--bg)',
-            }}
-          >
-            <span style={{
-              width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
-              border: payment === p.id ? '6px solid var(--ink)' : '1.5px solid var(--line-2)',
-              background: 'var(--bg)',
-            }} />
-            <span style={{ color: 'var(--ink-2)' }}>{p.icon}</span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: 'var(--serif)', fontSize: 13 }}>{p.label}</div>
-              <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>{p.sub}</div>
-            </div>
-          </label>
-        ))}
+          .map(p => {
+            const disabledByCurbside = p.id === 'thai_chuay_thai' && isCurbside;
+            return (
+              <label
+                key={p.id}
+                onClick={() => {
+                  if (disabledByCurbside) return;
+                  setPayment(p.id);
+                  track('payment_method_selected', { method: p.id });
+                }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
+                  borderRadius: 'var(--r-sm)', marginBottom: 6,
+                  cursor: disabledByCurbside ? 'default' : 'pointer',
+                  border: payment === p.id ? '1.5px solid var(--ink)' : '1px solid var(--line)',
+                  background: payment === p.id ? 'var(--bg-2)' : 'var(--bg)',
+                  opacity: disabledByCurbside ? 0.45 : 1,
+                }}
+              >
+                <span style={{
+                  width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+                  border: payment === p.id ? '6px solid var(--ink)' : '1.5px solid var(--line-2)',
+                  background: 'var(--bg)',
+                }} />
+                <span style={{ color: 'var(--ink-2)' }}>{p.icon}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontFamily: 'var(--serif)', fontSize: 13 }}>{p.label}</div>
+                  <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>{p.sub}</div>
+                  {disabledByCurbside && (
+                    <div style={{ fontSize: 10, color: 'var(--accent)', marginTop: 2 }}>
+                      {t('checkout.pay.notForCurbside')}
+                    </div>
+                  )}
+                </div>
+              </label>
+            );
+          })}
       </div>
 
       {/* ── 6. สรุปรายการ ───────────────────────────────────── */}

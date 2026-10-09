@@ -207,7 +207,8 @@ export default function Track() {
 
   const status   = order.status ?? 'pending';
   const stepIdx  = BAR_STEP[status] ?? -1;
-  const isCash   = order.payment_method === 'cash';
+  const isCash          = order.payment_method === 'cash';
+  const isThaiChuayThai = order.payment_method === 'thai_chuay_thai';
   const isReady  = status === 'ready';
   const isDone   = status === 'completed';
 
@@ -404,8 +405,8 @@ export default function Track() {
         </div>
       </div>
 
-      {/* ── Cash banner ───────────────────────────────────── */}
-      {isCash && !isDone && (
+      {/* ── Cash / Thai Chuay Thai banner ─────────────────── */}
+      {(isCash || isThaiChuayThai) && !isDone && (
         <div style={{
           margin: '20px 18px 0',
           padding: '10px 14px',
@@ -414,7 +415,9 @@ export default function Track() {
           borderRadius: 'var(--r-sm)',
           fontSize: 13, color: 'var(--gold)', fontWeight: 600, textAlign: 'center',
         }}>
-          {t('track.cashBanner', order.grand_total)}
+          {isThaiChuayThai
+            ? t('track.payThaiChuayThai', order.grand_total)
+            : t('track.cashBanner', order.grand_total)}
         </div>
       )}
 
@@ -467,13 +470,15 @@ export default function Track() {
           padding: '3px 8px', borderRadius: 'var(--r-pill)',
           background: isDone ? 'var(--bg-3)' : 'rgba(255,255,255,0.12)',
           color: isDone ? 'var(--ink-3)'
-            : isCash && !isDone ? 'rgba(251,243,227,0.65)' : 'rgba(251,243,227,0.8)',
+            : (isCash || isThaiChuayThai) && !isDone ? 'rgba(251,243,227,0.65)' : 'rgba(251,243,227,0.8)',
         }}>
           {isDone
             ? t('track.collected')
-            : isCash
-              ? t('track.cash')
-              : t('track.paid')}
+            : isThaiChuayThai
+              ? t('checkout.pay.thaiChuayThai')
+              : isCash
+                ? t('track.cash')
+                : t('track.paid')}
         </div>
       </div>
 

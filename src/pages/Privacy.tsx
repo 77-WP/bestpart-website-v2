@@ -1,22 +1,30 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useT } from '../i18n';
 import { I } from '../components/icons';
 import { PRIVACY_CONTACT, PRIVACY_CONTACT_URL } from '../config/privacy';
 
-const sectionHeading: React.CSSProperties = {
-  fontFamily: 'var(--serif)',
-  fontSize: 13,
-  fontWeight: 600,
-  color: 'var(--ink)',
-  marginTop: 22,
-  marginBottom: 6,
-};
-
-const bodyStyle: React.CSSProperties = {
+const body: React.CSSProperties = {
   fontSize: 14,
   color: 'var(--ink-2)',
   lineHeight: 1.7,
   margin: 0,
+};
+
+const note: React.CSSProperties = {
+  fontSize: 13,
+  color: 'var(--ink-3)',
+  lineHeight: 1.6,
+  margin: '4px 0 0',
+};
+
+const secHeading: React.CSSProperties = {
+  fontFamily: 'var(--serif)',
+  fontSize: 13,
+  fontWeight: 600,
+  color: 'var(--ink)',
+  marginTop: 20,
+  marginBottom: 6,
 };
 
 const listItem: React.CSSProperties = {
@@ -29,33 +37,7 @@ const listItem: React.CSSProperties = {
 export default function Privacy() {
   const navigate = useNavigate();
   const { t, dict } = useT();
-
-  const sections: Array<{ heading: string; itemKey?: keyof typeof dict; text?: string }> = [
-    {
-      heading: t('privacy.sec.controller'),
-      text:    t('privacy.controllerBody'),
-    },
-    {
-      heading: t('privacy.sec.data'),
-      itemKey: 'privacy.dataItems',
-    },
-    {
-      heading: t('privacy.sec.legal'),
-      itemKey: 'privacy.legalItems',
-    },
-    {
-      heading: t('privacy.sec.processors'),
-      itemKey: 'privacy.processorItems',
-    },
-    {
-      heading: t('privacy.sec.retention'),
-      itemKey: 'privacy.retentionItems',
-    },
-    {
-      heading: t('privacy.sec.rights'),
-      text:    t('privacy.rightsBody'),
-    },
-  ];
+  const [open, setOpen] = useState(false);
 
   return (
     <div className="page" style={{ paddingBottom: 40 }}>
@@ -73,34 +55,81 @@ export default function Privacy() {
       </div>
 
       <div style={{ padding: '20px 18px' }}>
-        <p style={{ ...bodyStyle, marginBottom: 4 }}>{t('privacy.noSell')}</p>
+        {/* Summary */}
+        <ul style={{ margin: '0 0 16px', paddingLeft: 18 }}>
+          {(dict['privacy.summary.items'] as string[]).map((item, i) => (
+            <li key={i} style={{ ...body, marginBottom: 6 }}>{item}</li>
+          ))}
+        </ul>
 
-        {sections.map(sec => (
-          <div key={sec.heading}>
-            <div style={sectionHeading}>{sec.heading}</div>
-            {sec.text && <p style={{ ...bodyStyle, marginBottom: 0 }}>{sec.text}</p>}
-            {sec.itemKey && (
-              <ul style={{ margin: 0, paddingLeft: 18 }}>
-                {(dict[sec.itemKey] as string[]).map((item, i) => (
-                  <li key={i} style={listItem}>{item}</li>
-                ))}
-              </ul>
-            )}
-          </div>
-        ))}
+        {/* Accordion toggle */}
+        <button
+          onClick={() => setOpen(o => !o)}
+          style={{
+            background: 'none', border: 0, padding: '4px 0',
+            fontSize: 13, color: 'var(--ink-3)', cursor: 'pointer',
+            display: 'block',
+          }}
+        >
+          {open ? t('privacy.collapse') : t('privacy.readMore')}
+        </button>
 
-        {PRIVACY_CONTACT && (
-          <p style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.6, marginTop: 24, marginBottom: 0 }}>
-            {t('privacy.contact')}:{' '}
+        {/* Accordion detail */}
+        {open && (
+          <div style={{ marginTop: 4 }}>
+            {/* a) Data controller */}
+            <div style={secHeading}>{t('privacy.sec.controller')}</div>
+            <p style={body}>{t('privacy.controllerBody')}</p>
+
+            {/* b) Data collected */}
+            <div style={secHeading}>{t('privacy.sec.data')}</div>
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              {(dict['privacy.dataItems'] as string[]).map((item, i) => (
+                <li key={i} style={listItem}>{item}</li>
+              ))}
+            </ul>
+            <p style={note}>{t('privacy.dataCaution')}</p>
+
+            {/* c) Legal basis */}
+            <div style={secHeading}>{t('privacy.sec.legal')}</div>
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              {(dict['privacy.legalItems'] as string[]).map((item, i) => (
+                <li key={i} style={listItem}>{item}</li>
+              ))}
+            </ul>
+
+            {/* d) Processors */}
+            <div style={secHeading}>{t('privacy.sec.processors')}</div>
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              {(dict['privacy.processorItems'] as string[]).map((item, i) => (
+                <li key={i} style={listItem}>{item}</li>
+              ))}
+            </ul>
+            <p style={note}>{t('privacy.processorNote')}</p>
+
+            {/* e) Retention */}
+            <div style={secHeading}>{t('privacy.sec.retention')}</div>
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              {(dict['privacy.retentionItems'] as string[]).map((item, i) => (
+                <li key={i} style={listItem}>{item}</li>
+              ))}
+            </ul>
+
+            {/* f) Rights */}
+            <div style={secHeading}>{t('privacy.sec.rights')}</div>
+            <p style={body}>{t('privacy.rightsBody')}</p>
+
+            {/* g) LINE contact link */}
+            <div style={secHeading}>{t('privacy.sec.lineContact')}</div>
             <a
               href={PRIVACY_CONTACT_URL}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ color: 'var(--ink-2)', textDecoration: 'underline' }}
+              style={{ ...body, color: 'var(--ink-2)', textDecoration: 'underline' }}
             >
               {PRIVACY_CONTACT}
             </a>
-          </p>
+          </div>
         )}
       </div>
     </div>

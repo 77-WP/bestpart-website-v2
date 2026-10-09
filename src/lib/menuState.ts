@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { supabase } from './supabase';
 import { roundUp5, minToHHMM, nextOpenMsg, SHOP, type ShopStatus, type TimeSlot } from '../config/shop';
 
+export { formatNextOpenForLang } from '../config/shop';
+
 /* ── Types ───────────────────────────────────────────────── */
 type ItemState = {
   id: string;
@@ -110,6 +112,11 @@ function _serverNow(): number {
   return Date.now() + _state.serverTimeOffset;
 }
 
+/** Current server-corrected time in ms — use with formatNextOpenForLang(). */
+export function getServerNow(): number {
+  return _serverNow();
+}
+
 /* ── Public helpers (read current module-level state) ────── */
 
 export function isItemUnavailable(id: string): boolean {
@@ -196,6 +203,8 @@ export type ServerShopStatus = ShopStatus & {
   isLoading: boolean;
   /** "HH:MM" Bangkok closing time — available when status is open */
   closesAtHHMM?: string;
+  /** Raw next-open datetime — use with formatNextOpenForLang() for bilingual display */
+  nextOpenAt?: Date;
   /** HH:MM Bangkok time of opens_at — only when serverShopStatus === 'preorder' */
   preorderOpensAtHHMM?: string;
 };
@@ -258,12 +267,14 @@ function _mapToServerShopStatus(): ServerShopStatus {
 
   /* ── Closed ───────────────────────────────────────────── */
   if (shopData.status === 'closed') {
-    const openIso     = shopData.opens_at ?? shopData.reopens_at;
+    const openIso      = shopData.opens_at ?? shopData.reopens_at;
+    const nextOpenAt   = openIso ? new Date(openIso) : undefined;
     const nextOpenMsg_ = openIso ? nextOpenMsg(openIso, _serverNow()) : '';
     return {
       isOpen:           false,
       slots:            [],
       nextOpenMsg:      nextOpenMsg_,
+      nextOpenAt,
       previewOpen:      false,
       forcedClosed:     !!shopData.reopens_at,
       reopenAt:         shopData.reopens_at ? new Date(shopData.reopens_at) : null,

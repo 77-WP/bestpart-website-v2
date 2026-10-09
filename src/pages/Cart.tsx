@@ -8,7 +8,7 @@ import { I } from '../components/icons';
 import { ProductSheet } from '../components/menu/ProductSheet';
 import { useT } from '../i18n';
 import { supabase } from '../lib/supabase';
-import { useMenuState, getCartIssues, cartHasBlocking, isItemUnavailable, useShopStatusServer } from '../lib/menuState';
+import { useMenuState, getCartIssues, cartHasBlocking, isItemUnavailable, useShopStatusServer, formatNextOpenForLang, getServerNow } from '../lib/menuState';
 import { track } from '../lib/analytics';
 
 /* ── Drinks ──────────────────────────────────────────────── */
@@ -88,7 +88,10 @@ export default function Cart() {
       const time = `${String(bkk.getUTCHours()).padStart(2,'0')}:${String(bkk.getUTCMinutes()).padStart(2,'0')}`;
       return t('shop.forcedClosed', date, time);
     }
-    return t('menu.status.closed', shopInfo.nextOpenMsg);
+    const nextMsg = shopInfo.nextOpenAt
+      ? formatNextOpenForLang(shopInfo.nextOpenAt, getServerNow(), lang)
+      : shopInfo.nextOpenMsg;
+    return t('menu.status.closed', nextMsg);
   }
 
   /* Drinks */

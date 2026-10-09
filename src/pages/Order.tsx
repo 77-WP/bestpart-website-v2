@@ -11,7 +11,7 @@ import { TEST_MODE } from '../config/env';
 import { ProductSheet } from '../components/menu/ProductSheet';
 import { FEATURED_KEYWORD } from '../config/featured';
 import { useT } from '../i18n';
-import { useMenuState, useShopStatusServer } from '../lib/menuState';
+import { useMenuState, useShopStatusServer, formatNextOpenForLang, getServerNow } from '../lib/menuState';
 import { track, trackOnce } from '../lib/analytics';
 
 /* ── Types ───────────────────────────────────────────────── */
@@ -116,7 +116,10 @@ export default function Order() {
       const time = `${String(bkk.getUTCHours()).padStart(2,'0')}:${String(bkk.getUTCMinutes()).padStart(2,'0')}`;
       return t('shop.forcedClosed', date, time);
     }
-    return t('menu.status.closed', shopInfo.nextOpenMsg);
+    const nextMsg = shopInfo.nextOpenAt
+      ? formatNextOpenForLang(shopInfo.nextOpenAt, getServerNow(), lang)
+      : shopInfo.nextOpenMsg;
+    return t('menu.status.closed', nextMsg);
   }
 
   /* ── Data ───────────────────────────────────────────── */

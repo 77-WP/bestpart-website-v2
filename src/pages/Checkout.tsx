@@ -15,6 +15,8 @@ import {
   getPaymentChannels,
   refreshMenuState,
   cartHasBlocking,
+  formatNextOpenForLang,
+  getServerNow,
 } from '../lib/menuState';
 import { HelpLink } from '../components/HelpLink';
 
@@ -105,7 +107,10 @@ export default function Checkout() {
       const time = `${String(bkk.getUTCHours()).padStart(2,'0')}:${String(bkk.getUTCMinutes()).padStart(2,'0')}`;
       return t('shop.forcedClosed', date, time);
     }
-    return t('menu.status.closed', shopInfo.nextOpenMsg);
+    const nextMsg = shopInfo.nextOpenAt
+      ? formatNextOpenForLang(shopInfo.nextOpenAt, getServerNow(), lang)
+      : shopInfo.nextOpenMsg;
+    return t('menu.status.closed', nextMsg);
   }
 
   /* ── Selected slot — undefined = not chosen ────────────── */

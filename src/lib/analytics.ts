@@ -3,9 +3,10 @@
  * All tracked properties must be anonymous identifiers only.
  */
 
-const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL as string;
-const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-const ENDPOINT      = `${SUPABASE_URL}/functions/v1/ingest-event`;
+import { supabaseKey } from './supabase';
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const ENDPOINT     = `${SUPABASE_URL}/functions/v1/ingest-event`;
 
 const AID_KEY    = 'bp_aid';
 const SID_KEY    = 'bp_sid';
@@ -201,9 +202,9 @@ async function post(events: QEvent[], keepalive: boolean): Promise<boolean> {
     const r = await fetch(ENDPOINT, {
       method: 'POST', keepalive,
       headers: {
-        'Content-Type':  'application/json',
-        apikey:          SUPABASE_ANON,
-        Authorization:   `Bearer ${SUPABASE_ANON}`,
+        'Content-Type': 'application/json',
+        apikey:         supabaseKey,
+        ...(supabaseKey.startsWith('sb_') ? {} : { Authorization: `Bearer ${supabaseKey}` }),
       },
       body: JSON.stringify({ events }),
     });

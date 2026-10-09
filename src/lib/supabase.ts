@@ -1,19 +1,24 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl     = import.meta.env.VITE_SUPABASE_URL     as string | undefined
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
+
+/** Publishable key (sb_publishable_…) preferred; falls back to legacy anon JWT */
+export const supabaseKey: string =
+  (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined) ||
+  (import.meta.env.VITE_SUPABASE_ANON_KEY        as string | undefined) ||
+  'placeholder'
 
 const _missing: string[] = []
-if (!supabaseUrl)     _missing.push('VITE_SUPABASE_URL')
-if (!supabaseAnonKey) _missing.push('VITE_SUPABASE_ANON_KEY')
-if (_missing.length)  _missing.forEach(v => console.error(`[supabase] Missing env var: ${v}`))
+if (!supabaseUrl) _missing.push('VITE_SUPABASE_URL')
+if (supabaseKey === 'placeholder') _missing.push('VITE_SUPABASE_PUBLISHABLE_KEY / VITE_SUPABASE_ANON_KEY')
+if (_missing.length) _missing.forEach(v => console.error(`[supabase] Missing env var: ${v}`))
 
 /** True when required Supabase env vars are absent — show config-error page instead of the app */
 export const supabaseConfigMissing = _missing.length > 0
 
 export const supabase = createClient(
-  supabaseUrl     ?? 'https://placeholder.supabase.co',
-  supabaseAnonKey ?? 'placeholder',
+  supabaseUrl ?? 'https://placeholder.supabase.co',
+  supabaseKey,
   { realtime: { params: { eventsPerSecond: 10 } } },
 )
 

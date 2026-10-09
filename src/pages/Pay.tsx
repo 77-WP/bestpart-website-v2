@@ -32,35 +32,19 @@ function useCountdown(expiresAt: string | null): number | null {
   return secs;
 }
 
-function isIOS(): boolean {
-  const ua = navigator.userAgent;
-  return /iPad|iPhone|iPod/.test(ua) || (ua.includes('Macintosh') && navigator.maxTouchPoints > 1);
-}
-
-function isInAppBrowser(): boolean {
-  const ua = navigator.userAgent;
-  return /Line\/|FBAN|FBAV|Instagram|TikTok|BytedanceWebview/i.test(ua);
-}
-
 export default function Pay() {
   const { orderId } = useParams<{ orderId: string }>();
   const navigate    = useNavigate();
   const { t }       = useT();
 
-  const [state, setState]         = useState<QrState>({ phase: 'loading' });
-  const [callName, setCallName]   = useState<string | null>(null);
-  const [showQrOverlay, setShowQrOverlay] = useState(false);
-  const [saveSheetUrl,  setSaveSheetUrl]  = useState<string | null>(null);
-  const [copiedLink,    setCopiedLink]    = useState(false);
-  const paidRef      = useRef(false);
-  const qrFileRef    = useRef<File | null>(null);
-  const [qrFileReady, setQrFileReady] = useState(false);
+  const [state, setState]       = useState<QrState>({ phase: 'loading' });
+  const [callName, setCallName] = useState<string | null>(null);
+  const paidRef                 = useRef(false);
 
   const fetchPromiseRef = useRef<{ orderId: string; promise: Promise<void> } | null>(null);
 
   const expiresAt = state.phase === 'ready' ? state.expiresAt : null;
   const countdown = useCountdown(expiresAt);
-  const qrBase64  = state.phase === 'ready' ? state.qrImage : null;
 
   const [showSuccess, setShowSuccess] = useState(false);
   const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -86,8 +70,6 @@ export default function Pay() {
     if (fetchPromiseRef.current?.orderId === orderId) {
       return fetchPromiseRef.current.promise;
     }
-    qrFileRef.current = null;
-    setQrFileReady(false);
     setState({ phase: 'loading' });
     const promise = (async () => {
       try {
@@ -186,195 +168,12 @@ export default function Pay() {
     }
   }, [countdown, state.phase]);
 
-  /* ── Display helpers (declared early — used in canvas effect below) ── */
-  const orderNumStr = callName ?? orderId?.slice(-4).toUpperCase() ?? '';
-
-  /* Pre-prepare composite QR image on canvas as soon as QR loads */
-  useEffect(() => {
-    if (!qrBase64) { qrFileRef.current = null; setQrFileReady(false); return; }
-
-    const W = 1080, H = 1350;
-    const canvas = document.createElement('canvas');
-    canvas.width  = W;
-    canvas.height = H;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let cancelled = false;
-
-    const logoImg = new Image();
-    const qrImg   = new Image();
-    let loaded = 0;
-
-    const amountSatang  = state.phase === 'ready' ? state.amountSatang : 0;
-    const amountStr     = `฿${(amountSatang / 100).toFixed(2)}`;
-    const orderLabel    = orderNumStr ? `${t('pay.qrCardOrderPrefix')} ${orderNumStr}` : '';
-    const footerText    = t('pay.qrCardFooter');
-
-    function drawComposite() {
-      if (cancelled) return;
-
-      // Background
-      ctx!.fillStyle = '#FBF3E3';
-      ctx!.fillRect(0, 0, W, H);
-
-      // Logo (top center, max 240×160)
-      const logoMaxW = 240, logoMaxH = 160, logoPadTop = 110;
-      const lw0 = logoImg.naturalWidth || logoMaxW;
-      const lh0 = logoImg.naturalHeight || logoMaxH;
-      const logoScale = Math.min(logoMaxW / lw0, logoMaxH / lh0);
-      const lw = Math.round(lw0 * logoScale);
-      const lh = Math.round(lh0 * logoScale);
-      ctx!.drawImage(logoImg, (W - lw) / 2, logoPadTop, lw, lh);
-
-      // Amount (large mono)
-      const amountY = logoPadTop + lh + 88;
-      ctx!.fillStyle = '#2B2118';
-      ctx!.textAlign = 'center';
-      ctx!.font = '700 90px "DM Mono", monospace';
-      ctx!.fillText(amountStr, W / 2, amountY);
-
-      // Order label
-      if (orderLabel) {
-        ctx!.font = '400 38px "DM Sans", sans-serif';
-        ctx!.fillStyle = '#8C7B6A';
-        ctx!.fillText(orderLabel, W / 2, amountY + 58);
-      }
-
-      // QR white card (large)
-      const qrSize = 520;
-      const qrPad  = 28;
-      const qrX    = (W - qrSize) / 2;
-      const qrY    = amountY + (orderLabel ? 100 : 60);
-      ctx!.fillStyle = '#ffffff';
-      ctx!.beginPath();
-      ctx!.roundRect(qrX - qrPad, qrY - qrPad, qrSize + qrPad * 2, qrSize + qrPad * 2, 24);
-      ctx!.fill();
-      ctx!.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
-
-      // Footer
-      ctx!.font = '400 34px "DM Sans", sans-serif';
-      ctx!.fillStyle = '#8C7B6A';
-      ctx!.fillText(footerText, W / 2, H - 72);
-
-      // Export
-      try {
-        canvas.toBlob((blob) => {
-          if (!blob || cancelled) return;
-          qrFileRef.current = new File([blob], 'promptpay-qr.png', { type: 'image/png' });
-          setQrFileReady(true);
-        }, 'image/png');
-      } catch {
-        // Tainted canvas (e.g. cross-origin logo) — fall back to plain QR file
-        const fallbackCanvas = document.createElement('canvas');
-        fallbackCanvas.width  = 1024;
-        fallbackCanvas.height = 1024;
-        const fc = fallbackCanvas.getContext('2d');
-        if (fc) {
-          fc.fillStyle = '#ffffff';
-          fc.fillRect(0, 0, 1024, 1024);
-          const q = Math.round(1024 * 0.10);
-          fc.drawImage(qrImg, q, q, 1024 - q * 2, 1024 - q * 2);
-          fallbackCanvas.toBlob((blob2) => {
-            if (!blob2 || cancelled) return;
-            qrFileRef.current = new File([blob2], 'promptpay-qr.png', { type: 'image/png' });
-            setQrFileReady(true);
-          }, 'image/png');
-        }
-      }
-    }
-
-    function onLoad() {
-      loaded++;
-      if (loaded >= 2) drawComposite();
-    }
-
-    logoImg.onload  = onLoad;
-    logoImg.onerror = onLoad; // proceed even if logo fails to load
-    qrImg.onload    = onLoad;
-    qrImg.onerror   = () => { /* can't draw without QR */ };
-
-    logoImg.crossOrigin = 'anonymous';
-    logoImg.src = '/brand/logo.png';
-    qrImg.crossOrigin = 'anonymous';
-    qrImg.src = `data:image/png;base64,${qrBase64}`;
-
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [qrBase64, orderNumStr]);
-
-
-  /* ── Save QR ──────────────────────────────────────────────  */
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'hint'>('idle');
-
-  /* canShare is evaluated at render time from the pre-built file */
-  const canShareQr = qrFileReady && qrFileRef.current != null
-    && !!navigator.canShare?.({ files: [qrFileRef.current] });
-
-  function openSaveSheet(file: File) {
-    const url = URL.createObjectURL(file);
-    setSaveSheetUrl(url);
-    setShowQrOverlay(true);
-  }
-
-  function closeSaveSheet() {
-    setShowQrOverlay(false);
-    setSaveSheetUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
-  }
-
-  function tryDownload(file: File): boolean {
-    try {
-      const url = URL.createObjectURL(file);
-      const a   = document.createElement('a');
-      a.href     = url;
-      a.download = 'promptpay-qr.png';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  const handleSaveQr = useCallback(() => {
-    if (state.phase !== 'ready' || !qrFileRef.current) return;
-    const file = qrFileRef.current;
-
-    if (canShareQr) {
-      /* Synchronous call — no await before this line so iOS user gesture is preserved */
-      navigator.share({ files: [file], title: 'PromptPay QR' })
-        .then(() => { setSaveStatus('saved'); })
-        .catch((e: unknown) => {
-          if (e instanceof Error && e.name === 'AbortError') {
-            setSaveStatus('idle'); // user dismissed share sheet — silent
-          } else {
-            // Share failed — try download (Android), else show sheet
-            if (!isIOS() && tryDownload(file)) {
-              setSaveStatus('saved');
-            } else {
-              openSaveSheet(file);
-            }
-          }
-        });
-      return;
-    }
-
-    // No Web Share API available
-    if (!isIOS() && tryDownload(file)) {
-      setSaveStatus('saved');
-      return;
-    }
-
-    // iOS or download not possible — show sheet
-    openSaveSheet(file);
-  }, [state, canShareQr]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  /* ── Remaining display helpers ──────────────────────────── */
+  /* ── Display helpers ──────────────────────────────────────  */
   const displayMins = countdown !== null ? Math.floor(countdown / 60) : 0;
   const displaySecs = countdown !== null ? countdown % 60 : 0;
   const nearExpiry  = countdown !== null && countdown < 300; // < 5 min
+
+  const orderNumStr = callName ?? orderId?.slice(-4).toUpperCase() ?? '';
 
   /* ── QR size: ~70% of max-width (480) ──────────────────── */
   const QR_SIZE = 280;
@@ -446,30 +245,6 @@ export default function Pay() {
             />
           </div>
 
-          {/* Save QR button — full width dark */}
-          <button
-            onClick={handleSaveQr}
-            disabled={saveStatus === 'saving' || !qrFileReady}
-            style={{
-              marginTop: 16, width: '100%',
-              background: saveStatus === 'saved' ? 'rgba(74,93,63,0.10)' : 'var(--ink)',
-              color: saveStatus === 'saved' ? 'var(--accent-2)' : '#fff',
-              border: saveStatus === 'saved' ? '1px solid var(--line)' : 0,
-              padding: '14px 18px', borderRadius: 'var(--r-pill)',
-              fontWeight: 600, fontSize: 13,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              cursor: (saveStatus === 'saving' || !qrFileReady) ? 'default' : 'pointer',
-              opacity: !qrFileReady ? 0.5 : 1,
-            }}
-          >
-            {saveStatus === 'saved' ? I.check(16) : I.download(16)}
-            {saveStatus === 'saving'
-              ? t('pay.saveQrSaving')
-              : saveStatus === 'saved'
-                ? t('pay.saveQrDone')
-                : t('pay.saveQrBtn')}
-          </button>
-
           {/* Countdown */}
           <div style={{
             marginTop: 16, width: '100%',
@@ -490,15 +265,15 @@ export default function Pay() {
             </span>
           </div>
 
-          {/* 3-step row */}
+          {/* 3-step screenshot guidance row */}
           <div style={{
-            marginTop: 20, width: '100%',
+            marginTop: 16, width: '100%',
             display: 'flex', justifyContent: 'space-around', alignItems: 'flex-start',
           }}>
             {[
-              { icon: I.download(20), label: t('pay.stepSave') },
-              { icon: I.smartphone(20), label: t('pay.stepOpenApp') },
-              { icon: I.qr(20), label: t('pay.stepScanPhoto') },
+              { icon: I.receipt(20),    label: t('pay.stepSave')     },
+              { icon: I.smartphone(20), label: t('pay.stepOpenApp')  },
+              { icon: I.qr(20),         label: t('pay.stepScanPhoto')},
             ].map((step, i) => (
               <div key={i} style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
@@ -510,6 +285,17 @@ export default function Pay() {
                 </span>
               </div>
             ))}
+          </div>
+
+          {/* Screenshot hint */}
+          <div style={{
+            marginTop: 10, width: '100%',
+            padding: '7px 12px',
+            borderRadius: 'var(--r-sm)',
+            background: 'var(--bg-3)',
+            fontSize: 11, color: 'var(--ink-2)', textAlign: 'center', lineHeight: 1.5,
+          }}>
+            {t('pay.screenshotHint')}
           </div>
 
           {/* Waiting indicator */}
@@ -622,77 +408,6 @@ export default function Pay() {
           <div style={{ fontSize: 13, color: 'var(--ink-3)', textAlign: 'center' }}>
             {t('pay.successSub2')}
           </div>
-        </div>
-      )}
-
-      {/* Save sheet — long-press to save (or open-in-browser for in-app browsers) */}
-      {showQrOverlay && state.phase === 'ready' && (
-        <div
-          onClick={closeSaveSheet}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 100,
-            background: 'rgba(43,33,24,0.82)',
-            display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center',
-            gap: 20,
-            padding: '32px 24px',
-          }}
-        >
-          {isInAppBrowser() ? (
-            <>
-              <div style={{
-                fontSize: 14, color: '#fffdf8', textAlign: 'center', lineHeight: 1.7, fontWeight: 600,
-              }}>
-                {t('pay.openInBrowser')}
-              </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigator.clipboard?.writeText(window.location.href).then(() => {
-                    setCopiedLink(true);
-                    setTimeout(() => setCopiedLink(false), 2000);
-                  });
-                }}
-                style={{
-                  background: 'rgba(255,255,255,0.18)', color: '#fffdf8',
-                  border: '1px solid rgba(255,255,255,0.3)',
-                  padding: '12px 28px', borderRadius: 'var(--r-pill)',
-                  fontWeight: 600, fontSize: 13, cursor: 'pointer',
-                }}
-              >
-                {copiedLink ? t('pay.copied') : t('pay.copyLink')}
-              </button>
-            </>
-          ) : (
-            <>
-              {saveSheetUrl && (
-                <img
-                  src={saveSheetUrl}
-                  alt="PromptPay QR"
-                  onClick={(e) => e.stopPropagation()}
-                  style={{
-                    width: 240, borderRadius: 16, display: 'block', maxHeight: '60vh', objectFit: 'contain',
-                  }}
-                />
-              )}
-              <div style={{
-                fontSize: 13, color: '#fffdf8', textAlign: 'center', lineHeight: 1.6,
-              }}>
-                {t('pay.saveHintLongPress')}
-              </div>
-            </>
-          )}
-          <button
-            onClick={closeSaveSheet}
-            style={{
-              marginTop: 4, background: 'rgba(255,255,255,0.12)',
-              color: '#fffdf8', border: '1px solid rgba(255,255,255,0.25)',
-              padding: '12px 28px', borderRadius: 'var(--r-pill)',
-              fontWeight: 600, fontSize: 13, cursor: 'pointer',
-            }}
-          >
-            {t('pay.closeOverlay')}
-          </button>
         </div>
       )}
     </div>

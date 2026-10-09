@@ -6,7 +6,7 @@ import { Bowl } from '../components/Bowl';
 import { CartBar } from '../components/CartBar';
 import { TabBar } from '../components/TabBar';
 import { I } from '../components/icons';
-import { SHOP, shopCloseLabel } from '../config/shop';
+import { SHOP } from '../config/shop';
 import { TEST_MODE } from '../config/env';
 import { ProductSheet } from '../components/menu/ProductSheet';
 import { FEATURED_KEYWORD } from '../config/featured';
@@ -109,6 +109,7 @@ export default function Order() {
   const shopInfo = useShopStatusServer();
 
   function shopClosedMsg(): string {
+    if (shopInfo.isLoading) return t('menu.status.checking');
     if (shopInfo.forcedClosed && shopInfo.reopenAt) {
       const bkk  = new Date(shopInfo.reopenAt.getTime() + 7 * 3_600_000);
       const date = bkk.toLocaleDateString(lang === 'th' ? 'th-TH' : 'en-GB', { day: 'numeric', month: 'short' });
@@ -351,7 +352,7 @@ export default function Order() {
                 color: shopInfo.isOpen ? 'var(--accent-2)' : 'var(--ink-3)',
               }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: shopInfo.isOpen ? 'var(--accent-2)' : 'var(--ink-3)' }} />
-                {shopInfo.isOpen ? t('menu.status.open', shopCloseLabel()) : shopClosedMsg()}
+                {shopInfo.isOpen ? t('menu.status.open', shopInfo.closesAtHHMM ?? '') : shopClosedMsg()}
               </span>
               <button
                 onClick={cycleMethod}

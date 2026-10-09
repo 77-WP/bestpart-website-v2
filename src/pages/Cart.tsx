@@ -81,6 +81,7 @@ export default function Cart() {
   const shopInfo = useShopStatusServer();
 
   function shopClosedMsg(): string {
+    if (shopInfo.isLoading) return t('menu.status.checking');
     if (shopInfo.forcedClosed && shopInfo.reopenAt) {
       const bkk  = new Date(shopInfo.reopenAt.getTime() + 7 * 3_600_000);
       const date = bkk.toLocaleDateString(lang === 'th' ? 'th-TH' : 'en-GB', { day: 'numeric', month: 'short' });

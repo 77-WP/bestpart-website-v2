@@ -31,6 +31,7 @@ export const EN: Dict = {
   // ── Menu page ─────────────────────────────────────────────
   'menu.status.open':          (close: string) => `Open · Until ${close}`,
   'menu.status.closed':        (next: string) => `Closed · Opens ${next}`,
+  'menu.status.checking':      'Checking shop status\u2026',
   'menu.header.closed.browse': '· Browse menu',
   'menu.method.dine':          'Dine-in',
   'menu.method.takeaway':      'Takeaway',

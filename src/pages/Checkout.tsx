@@ -4,7 +4,7 @@ import { useCart, cartTotal, itemTotal } from '../store/cart';
 import { useT } from '../i18n';
 import { supabase, readFnError } from '../lib/supabase';
 import { I } from '../components/icons';
-import { SHOP, shopCloseLabel, computeShopStatus, roundUp5, minToHHMM } from '../config/shop';
+import { SHOP } from '../config/shop';
 import { TEST_MODE, ENABLE_BEAM, CURBSIDE_PROMPTPAY_ONLY } from '../config/env';
 import { LINKS } from '../config/links';
 import { saveLocalOrder } from '../lib/localOrders';
@@ -72,25 +72,6 @@ const inputBase: React.CSSProperties = {
   outline: 'none',
 };
 
-/* Build TEST_MODE-safe ShopStatus (used only for slot validity check at submit time) */
-function makeShopInfo() {
-  const base = computeShopStatus();
-  if (!TEST_MODE) return base;
-  if (base.isOpen && base.slots.length > 0) return base;
-  const now    = new Date();
-  const bkk    = new Date(now.getTime() + 7 * 3600 * 1000);
-  const nowMin = bkk.getUTCHours() * 60 + bkk.getUTCMinutes();
-  const asapMin = roundUp5(nowMin + SHOP.prepMinutes);
-  return {
-    isOpen:       true,
-    slots:        [{ label: minToHHMM(asapMin), diffMin: SHOP.prepMinutes, value: null, isAsap: true }],
-    nextOpenMsg:  '',
-    previewOpen:  false,
-    forcedClosed: false,
-    reopenAt:     null,
-  };
-}
-
 /* ── Component ───────────────────────────────────────────── */
 export default function Checkout() {
   const navigate       = useNavigate();
@@ -117,6 +98,7 @@ export default function Checkout() {
   const isPreorder = shopInfo.serverShopStatus === 'preorder';
 
   function shopClosedMsg(): string {
+    if (shopInfo.isLoading) return t('menu.status.checking');
     if (shopInfo.forcedClosed && shopInfo.reopenAt) {
       const bkk  = new Date(shopInfo.reopenAt.getTime() + 7 * 3_600_000);
       const date = bkk.toLocaleDateString(lang === 'th' ? 'th-TH' : 'en-GB', { day: 'numeric', month: 'short' });
@@ -308,8 +290,7 @@ export default function Checkout() {
     }
 
     // Re-check slot validity at submit time
-    const currentInfo = makeShopInfo();
-    if (typeof selSlot === 'string' && !currentInfo.slots.some(s => s.value === selSlot)) {
+    if (typeof selSlot === 'string' && !shopInfo.slots.some(s => s.value === selSlot)) {
       setSelSlot(undefined);
       setSlotExpiredMsg(true);
       setSubmitHint(t('checkout.validTime'));
@@ -677,7 +658,9 @@ export default function Checkout() {
             <span style={{ color: 'var(--ink-3)', marginRight: 2 }}>{t('checkout.pickupAt')}</span>
           )}
           <span style={{ color: 'var(--ink-3)' }}>·</span>
-          <span style={{ color: 'var(--ink-3)' }}>{t('checkout.openUntil', shopCloseLabel())}</span>
+          {shopInfo.closesAtHHMM && (
+            <span style={{ color: 'var(--ink-3)' }}>{t('checkout.openUntil', shopInfo.closesAtHHMM)}</span>
+          )}
           {LINKS.googleMaps && (
             <>
               <span style={{ color: 'var(--ink-3)' }}>·</span>

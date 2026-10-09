@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './supabase';
-import { computeShopStatus, minToHHMM, SHOP, type ShopStatus, type TimeSlot } from '../config/shop';
+import { roundUp5, minToHHMM, nextOpenMsg, SHOP, type ShopStatus, type TimeSlot } from '../config/shop';
 
 /* ── Types ───────────────────────────────────────────────── */
 type ItemState = {
@@ -74,9 +74,9 @@ async function _fetch() {
       _state = { data: md, serverTimeOffset: serverNow - localNow };
       _notify();
     }
-    // On error: keep last state silently (fail-open)
+    // On error: keep last state silently
   } catch {
-    // fail-open: server validates again at order time
+    // fail-closed: UI handles null state as loading
   } finally {
     _fetching = false;
   }
@@ -188,66 +188,184 @@ export function cartHasBlocking(
 
 /* ── Server shop status ──────────────────────────────────── */
 
-/** ShopStatus extended with server-side shop status field. */
+/** ShopStatus extended with server-sourced fields. */
 export type ServerShopStatus = ShopStatus & {
-  /** null = server data not yet loaded (using local fallback) */
+  /** null = server data not yet loaded */
   serverShopStatus: 'open' | 'preorder' | 'closed' | null;
+  /** true while waiting for first successful server response */
+  isLoading: boolean;
+  /** "HH:MM" Bangkok closing time — available when status is open */
+  closesAtHHMM?: string;
   /** HH:MM Bangkok time of opens_at — only when serverShopStatus === 'preorder' */
   preorderOpensAtHHMM?: string;
 };
 
 function _mapToServerShopStatus(): ServerShopStatus {
-  const shopData = _state.data?.shop;
-  if (!shopData) {
-    return { ...computeShopStatus(), serverShopStatus: null };
-  }
-
-  if (shopData.status === 'closed') {
-    const local = computeShopStatus();
+  /* ── PREVIEW_OPEN: force open in Vercel preview deploys ── */
+  const isPreviewEnv = import.meta.env.VITE_VERCEL_ENV === 'preview';
+  const previewOpen  = isPreviewEnv && import.meta.env.VITE_PREVIEW_OPEN === 'true';
+  if (previewOpen) {
+    const serverNow = _serverNow();
+    const nowBkk    = new Date(serverNow + 7 * 3_600_000);
+    const nowMin    = nowBkk.getUTCHours() * 60 + nowBkk.getUTCMinutes();
+    const prepMin   = _state.data?.prep_minutes ?? SHOP.prepMinutes;
+    const asapMin   = roundUp5(nowMin + prepMin);
     return {
-      isOpen:       false,
-      slots:        [],
-      nextOpenMsg:  local.nextOpenMsg,
-      previewOpen:  false,
-      forcedClosed: !!shopData.reopens_at,
-      reopenAt:     shopData.reopens_at ? new Date(shopData.reopens_at) : null,
-      serverShopStatus: 'closed',
+      isOpen:           true,
+      slots:            [{ label: minToHHMM(asapMin), diffMin: prepMin, value: null, isAsap: true }],
+      nextOpenMsg:      '',
+      previewOpen:      true,
+      forcedClosed:     false,
+      reopenAt:         null,
+      serverShopStatus: _state.data ? 'open' : null,
+      isLoading:        !_state.data,
     };
   }
 
+  /* ── FORCE_CLOSED_UNTIL: client-side emergency override ── */
+  const forceUntilStr = import.meta.env.VITE_FORCE_CLOSED_UNTIL as string | undefined;
+  if (forceUntilStr) {
+    const reopenAt  = new Date(forceUntilStr);
+    const serverNow = _serverNow();
+    if (!isNaN(reopenAt.getTime()) && serverNow < reopenAt.getTime()) {
+      return {
+        isOpen:           false,
+        slots:            [],
+        nextOpenMsg:      '',
+        previewOpen:      false,
+        forcedClosed:     true,
+        reopenAt,
+        serverShopStatus: _state.data ? (_state.data.shop.status as 'open' | 'preorder' | 'closed') : null,
+        isLoading:        !_state.data,
+      };
+    }
+  }
+
+  /* ── Loading: server hasn't responded yet ────────────── */
+  const shopData = _state.data?.shop;
+  if (!shopData) {
+    return {
+      isOpen:           false,
+      slots:            [],
+      nextOpenMsg:      '',
+      previewOpen:      false,
+      forcedClosed:     false,
+      reopenAt:         null,
+      serverShopStatus: null,
+      isLoading:        true,
+    };
+  }
+
+  /* ── Closed ───────────────────────────────────────────── */
+  if (shopData.status === 'closed') {
+    const openIso     = shopData.opens_at ?? shopData.reopens_at;
+    const nextOpenMsg_ = openIso ? nextOpenMsg(openIso, _serverNow()) : '';
+    return {
+      isOpen:           false,
+      slots:            [],
+      nextOpenMsg:      nextOpenMsg_,
+      previewOpen:      false,
+      forcedClosed:     !!shopData.reopens_at,
+      reopenAt:         shopData.reopens_at ? new Date(shopData.reopens_at) : null,
+      serverShopStatus: 'closed',
+      isLoading:        false,
+    };
+  }
+
+  /* ── Preorder ─────────────────────────────────────────── */
   if (shopData.status === 'preorder') {
-    const prepMin = _state.data?.prep_minutes ?? SHOP.prepMinutes;
+    const prepMin = _state.data!.prep_minutes ?? SHOP.prepMinutes;
     if (!shopData.opens_at) {
-      return { ...computeShopStatus(), serverShopStatus: 'preorder' };
+      // opens_at missing: treat as loading/unknown
+      return {
+        isOpen:           false,
+        slots:            [],
+        nextOpenMsg:      '',
+        previewOpen:      false,
+        forcedClosed:     false,
+        reopenAt:         null,
+        serverShopStatus: 'preorder',
+        isLoading:        false,
+      };
     }
     const opensAtDate = new Date(shopData.opens_at);
     const opensAtBkk  = new Date(opensAtDate.getTime() + 7 * 3_600_000);
     const opensAtMin  = opensAtBkk.getUTCHours() * 60 + opensAtBkk.getUTCMinutes();
-    const pickupMin   = opensAtMin + prepMin; // no rounding per spec
+    const pickupMin   = opensAtMin + prepMin;
     const serverNow   = _serverNow();
     const nowBkk      = new Date(serverNow + 7 * 3_600_000);
     const nowMin      = nowBkk.getUTCHours() * 60 + nowBkk.getUTCMinutes();
     const slot: TimeSlot = {
       label:   minToHHMM(pickupMin),
       diffMin: pickupMin - nowMin,
-      value:   null,   // asap → server picks exact time
+      value:   null,
       isAsap:  true,
     };
     return {
-      isOpen:       true,
-      slots:        [slot],
-      nextOpenMsg:  '',
-      previewOpen:  false,
-      forcedClosed: false,
-      reopenAt:     null,
+      isOpen:               true,
+      slots:                [slot],
+      nextOpenMsg:          '',
+      previewOpen:          false,
+      forcedClosed:         false,
+      reopenAt:             null,
       serverShopStatus:     'preorder',
+      isLoading:            false,
       preorderOpensAtHHMM:  minToHHMM(opensAtMin),
     };
   }
 
-  // status === 'open'
-  const base = computeShopStatus();
-  return { ...base, serverShopStatus: 'open' };
+  /* ── Open: compute slots from server closes_at + server time ── */
+  const prepMin   = _state.data!.prep_minutes ?? SHOP.prepMinutes;
+  const serverNow = _serverNow();
+  const nowBkk    = new Date(serverNow + 7 * 3_600_000);
+  const nowMin    = nowBkk.getUTCHours() * 60 + nowBkk.getUTCMinutes();
+
+  let closeMin: number;
+  let closesAtHHMM: string | undefined;
+  if (shopData.closes_at) {
+    const closesAtBkk = new Date(new Date(shopData.closes_at).getTime() + 7 * 3_600_000);
+    closeMin     = closesAtBkk.getUTCHours() * 60 + closesAtBkk.getUTCMinutes();
+    closesAtHHMM = minToHHMM(closeMin);
+  } else {
+    // closes_at missing: keep slots empty (near-close or data issue)
+    return {
+      isOpen:           true,
+      slots:            [],
+      nextOpenMsg:      '',
+      previewOpen:      false,
+      forcedClosed:     false,
+      reopenAt:         null,
+      serverShopStatus: 'open',
+      isLoading:        false,
+    };
+  }
+
+  const slots: TimeSlot[] = [];
+  const seen  = new Set<number>();
+
+  const asapMin = roundUp5(nowMin + prepMin);
+  if (asapMin < closeMin) {
+    seen.add(asapMin);
+    slots.push({ label: minToHHMM(asapMin), diffMin: asapMin - nowMin, value: null, isAsap: true });
+  }
+  for (const offset of [30, 45, 60, 90]) {
+    const slotMin = roundUp5(nowMin + offset);
+    if (slotMin >= closeMin || seen.has(slotMin)) continue;
+    seen.add(slotMin);
+    slots.push({ label: minToHHMM(slotMin), diffMin: slotMin - nowMin, value: minToHHMM(slotMin) });
+  }
+
+  return {
+    isOpen:           true,
+    slots,
+    nextOpenMsg:      '',
+    previewOpen:      false,
+    forcedClosed:     false,
+    reopenAt:         null,
+    serverShopStatus: 'open',
+    isLoading:        false,
+    closesAtHHMM,
+  };
 }
 
 /* ── Hooks ───────────────────────────────────────────────── */
@@ -267,9 +385,9 @@ export function useMenuState() {
 }
 
 /**
- * React hook: shop status sourced from the server menu-state poll.
- * Falls back to computeShopStatus() until server data arrives.
- * Updates every time the menu-state poll fires (~30 s).
+ * React hook: shop status sourced entirely from server menu-state poll.
+ * Returns isLoading=true until first server response arrives.
+ * Updates every time the poll fires (~30 s).
  */
 export function useShopStatusServer(): ServerShopStatus {
   const [, setTick] = useState(0);

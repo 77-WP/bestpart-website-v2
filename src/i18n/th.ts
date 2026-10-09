@@ -34,6 +34,7 @@ export const TH = {
   // ── Menu page ─────────────────────────────────────────────
   'menu.status.open':          (close: string) => `เปิด · ถึง ${close}`,
   'menu.status.closed':        (next: string) => `ปิด · เปิด ${next}`,
+  'menu.status.checking':      'กำลังตรวจสอบสถานะร้าน\u2026',
   'menu.header.closed.browse': '· ดูเมนูได้',
   'menu.method.dine':          'ทานที่ร้าน',
   'menu.method.takeaway':      'รับกลับ',

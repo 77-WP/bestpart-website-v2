@@ -422,7 +422,7 @@ export default function Checkout() {
 
     const orderId = result.order_id;
     sessionStorage.removeItem(IDEM_KEY);
-    saveLocalOrder(orderId, new Date().toISOString(), name.trim());
+    saveLocalOrder(orderId, new Date().toISOString(), remember ? name.trim() : undefined);
 
     // Save contact only if user opted in
     if (remember) {
@@ -882,6 +882,14 @@ export default function Checkout() {
           <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 4, paddingLeft: 26 }}>
             {t('checkout.rememberHelper')}
           </div>
+        </div>
+
+        {/* Privacy note */}
+        <div style={{ marginTop: 10, fontSize: 10, color: 'var(--ink-3)', lineHeight: 1.5 }}>
+          {t('checkout.privacyNote')}{' '}
+          <Link to="/privacy" style={{ color: 'var(--ink-3)', textDecoration: 'underline' }}>
+            {t('checkout.privacyLink')}
+          </Link>
         </div>
       </div>
 

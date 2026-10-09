@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { useCart, cartTotal, itemTotal, type CartItem } from '../store/cart';
 import { Bowl } from '../components/Bowl';
@@ -592,6 +592,12 @@ export default function Cart() {
         </div>
         <div style={{ marginTop: 2, fontSize: 10, color: 'var(--ink-3)' }}>
           {t('cart.kitchenNoteSmall')}
+        </div>
+        <div style={{ marginTop: 4, fontSize: 10, color: 'var(--ink-3)', lineHeight: 1.5 }}>
+          {t('cart.kitchenNotePrivacy')}{' '}
+          <Link to="/privacy" style={{ color: 'var(--ink-3)', textDecoration: 'underline' }}>
+            {t('privacy.link')}
+          </Link>
         </div>
       </motion.div>
 
